@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bocce Tournament</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --green: #2d6a4f; --green-light: #52b788; --green-dark: #1b4332;
+    --gold: #d4a017; --gold-light: #f4c842; --gold-dark: #a37800;
+    --cream: #fefae0; --cream-dark: #e9dfc3;
+    --brown: #5c3d1e; --brown-light: #8b5e3c;
+    --red: #c1121f; --blue: #1d6fa4; --gray: #6c757d;
+    --white: #fff; --text: #1a1a1a; --text-muted: #555;
+    --radius: 12px; --shadow: 0 2px 12px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Georgia', serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+  
+  /* NAV */
+  #nav { background: var(--green-dark); color: var(--gold-light); padding: 0; display: flex; flex-direction: column; }
+  #nav-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+  #nav-title { font-size: 1.1rem; font-weight: bold; letter-spacing: 1px; }
+  #nav-player-info { font-size: 0.78rem; opacity: 0.85; }
+  #nav-tabs { display: flex; overflow-x: auto; background: var(--green); }
+  .nav-tab { padding: 10px 14px; font-size: 0.78rem; cursor: pointer; white-space: nowrap; border-bottom: 3px solid transparent; color: #cce; transition: all 0.2s; font-family: Georgia, serif; }
+  .nav-tab.active { border-bottom-color: var(--gold-light); color: var(--gold-light); background: var(--green-dark); }
+  .nav-tab:hover { background: var(--green-dark); }
+
+  /* SCREENS */
+  .screen { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
+  .screen.active { display: block; }
+
+  /* CARDS */
+  .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; border-left: 4px solid var(--green); }
+  .card.gold { border-left-color: var(--gold); }
+  .card.red { border-left-color: var(--red); }
+  .card-title { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .card h2 { font-size: 1.2rem; color: var(--green-dark); margin-bottom: 10px; }
+
+  /* FORMS */
+  input, select, textarea { width: 100%; padding: 10px 12px; border: 1.5px solid #ccc; border-radius: 8px; font-size: 1rem; font-family: Georgia, serif; background: var(--white); color: var(--text); margin-bottom: 10px; }
+  input:focus, select:focus { outline: none; border-color: var(--green); }
+  label { font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
+
+  /* BUTTONS */
+  .btn { display: inline-block; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.95rem; font-family: Georgia, serif; font-weight: bold; transition: all 0.2s; text-align: center; }
+  .btn-green { background: var(--green); color: var(--white); }
+  .btn-green:hover { background: var(--green-dark); }
+  .btn-gold { background: var(--gold); color: var(--white); }
+  .btn-gold:hover { background: var(--gold-dark); }
+  .btn-red { background: var(--red); color: var(--white); }
+  .btn-gray { background: var(--gray); color: var(--white); }
+  .btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+  .btn-full { width: 100%; display: block; margin-bottom: 8px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* BADGES */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.72rem; font-weight: bold; }
+  .badge-green { background: #d4edda; color: #155724; }
+  .badge-gold { background: #fff3cd; color: #856404; }
+  .badge-red { background: #f8d7da; color: #721c24; }
+  .badge-blue { background: #d1ecf1; color: #0c5460; }
+  .badge-gray { background: #e2e3e5; color: #383d41; }
+
+  /* LEADERBOARD */
+  .lb-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eee; }
+  .lb-rank { font-size: 1.2rem; font-weight: bold; color: var(--green-dark); min-width: 30px; }
+  .lb-name { flex: 1; font-weight: bold; }
+  .lb-stats { font-size: 0.78rem; color: var(--text-muted); }
+  .lb-row.qualified .lb-name::after { content: ' ★'; color: var(--gold); }
+
+  /* SCORING */
+  #score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .score-card { background: var(--white); border-radius: var(--radius); padding: 14px; text-align: center; box-shadow: var(--shadow); border: 2px solid transparent; }
+  .score-card.leading { border-color: var(--gold); }
+  .score-card.winner { border-color: var(--green); background: #eafaf1; }
+  .score-card .player-name { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .score-card .player-score { font-size: 2.2rem; font-weight: bold; color: var(--green-dark); }
+  .score-card .player-num { font-size: 0.72rem; color: var(--gray); }
+
+  /* FRAME LOG */
+  .frame-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem; }
+  .frame-num { min-width: 24px; font-weight: bold; color: var(--green-dark); }
+  .frame-pts { font-weight: bold; }
+  .spock-badge { color: var(--gold-dark); font-size: 0.75rem; }
+
+  /* PUBLIC DISPLAY */
+  #display-screen { background: var(--green-dark); min-height: 100vh; color: var(--cream); padding: 0; }
+  #display-screen .screen { max-width: 100%; padding: 12px; }
+  .display-header { text-align: center; padding: 16px; border-bottom: 2px solid var(--gold); margin-bottom: 16px; }
+  .display-title { font-size: 1.6rem; color: var(--gold-light); letter-spacing: 2px; }
+  .live-game-card { background: rgba(255,255,255,0.08); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.15); }
+  .live-game-title { font-size: 0.78rem; color: var(--gold-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .live-scores { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .live-score-box { text-align: center; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; }
+  .live-score-box .lsb-name { font-size: 0.75rem; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .live-score-box .lsb-pts { font-size: 1.8rem; font-weight: bold; color: var(--gold-light); }
+  .announcement-item { padding: 8px 12px; background: rgba(255,255,255,0.06); border-radius: 8px; margin-bottom: 6px; font-size: 0.88rem; border-left: 3px solid var(--gold); }
+
+  /* UTILS */
+  .flex { display: flex; }
+  .gap-8 { gap: 8px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-16 { margin-bottom: 16px; }
+  .text-center { text-align: center; }
+  .text-muted { color: var(--text-muted); font-size: 0.85rem; }
+  .section-title { font-size: 1rem; font-weight: bold; color: var(--green-dark); margin-bottom: 10px; border-bottom: 2px solid var(--cream-dark); padding-bottom: 6px; }
+  .alert { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 0.88rem; }
+  .alert-success { background: #d4edda; color: #155724; }
+  .alert-danger { background: #f8d7da; color: #721c24; }
+  .alert-info { background: #d1ecf1; color: #0c5460; }
+  .alert-warning { background: #fff3cd; color: #856404; }
+  .divider { border: none; border-top: 1px solid var(--cream-dark); margin: 14px 0; }
+  #loading { position: fixed; inset: 0; background: var(--green-dark); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; z-index: 1000; }
+  #loading h1 { color: var(--gold-light); font-size: 1.6rem; letter-spacing: 2px; }
+  #loading p { color: #aaa; font-size: 0.9rem; }
+  .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top-color: var(--gold-light); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .player-list-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; }
+  .player-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--green); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; flex-shrink: 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .autocomplete-wrapper { position: relative; }
+  .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1.5px solid var(--green); border-top: none; border-radius: 0 0 8px 8px; z-index: 100; max-height: 180px; overflow-y: auto; }
+  .autocomplete-item { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; }
+  .autocomplete-item:hover { background: var(--cream); }
+  #pending-banner { background: var(--gold); color: var(--brown); padding: 10px 16px; font-size: 0.88rem; font-weight: bold; display: none; }
+  #ticker-bar { background: var(--green-dark); color: var(--gold-light); padding: 7px 16px; font-size: 0.82rem; display: flex; align-items: center; gap: 10px; min-height: 32px; overflow: hidden; }
+  #ticker-bar .ticker-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; white-space: nowrap; }
+  #ticker-msg { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.5s; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <h1>🎯 Bocce Tournament</h1>
+  <p>Connecting...</p>
+</div>
+
+<div id="nav" style="display:none">
+  <div id="nav-header">
+    <span id="nav-title">🎯 Bocce Tournament</span>
+    <span style="display:flex; align-items:center; gap:8px;">
+      <span id="nav-player-info"></span>
+      <button onclick="switchPlayer()" style="background:rgba(255,255,255,0.15); border:none; color:var(--gold-light); font-size:0.72rem; padding:4px 8px; border-radius:6px; cursor:pointer;">Switch</button>
+    </span>
+  </div>
+  <div id="nav-tabs"></div>
+</div>
+<div id="ticker-bar" style="display:none;">
+  <span class="ticker-label">📢</span>
+  <span id="ticker-msg">Welcome to the Bocce Tournament!</span>
+</div>
+
+<div id="screens">
+  <!-- JOIN -->
+  <div id="screen-join" class="screen active">
+    <div style="text-align:center; padding: 20px 0 10px;">
+      <div style="font-size: 3rem;">🎯</div>
+      <h1 style="color: var(--green-dark); font-size: 1.6rem; margin-bottom: 4px;">Bocce Tournament</h1>
+      <p class="text-muted">Enter your name and the join code to participate</p>
+    </div>
+    <div class="card">
+      <div id="join-msg"></div>
+      <label>First Name</label>
+      <input type="text" id="join-first" placeholder="First name" autocomplete="given-name">
+      <label>Last Name</label>
+      <input type="text" id="join-last" placeholder="Last name" autocomplete="family-name">
+      <label>Tournament Join Code</label>
+      <input type="text" id="join-code" placeholder="Enter join code" autocomplete="off" style="text-transform:uppercase; letter-spacing:2px;">
+      <label>Preferred Player Number <span style="opacity:0.6;">(optional, 1–999)</span></label>
+      <input type="number" id="join-preferred-num" placeholder="Leave blank to auto-assign" min="1" max="999">
+      <button class="btn btn-green btn-full" onclick="joinTournament()">Join Tournament</button>
+      <hr class="divider">
+      <p class="text-muted text-center" style="margin-bottom:8px;">Already joined? Find yourself:</p>
+      <div class="autocomplete-wrapper">
+        <input type="text" id="rejoin-search" placeholder="Type name or player #..." oninput="searchPlayers(this.value, 'rejoin-list')">
+        <div class="autocomplete-list" id="rejoin-list"></div>
+      </div>
+      <button class="btn btn-gray btn-full" onclick="rejoinAs()">Continue as Selected Player</button>
+    </div>
+    <div class="card" style="text-align:center;">
+      <p class="text-muted" style="margin-bottom:8px;">Public Display Screen</p>
+      <button class="btn btn-gold btn-full" onclick="showDisplay()">Open Display View</button>
+    </div>
+  </div>
+
+  <!-- LOBBY -->
+  <div id="screen-lobby" class="screen">
+    <div id="lobby-msg"></div>
+    <div class="card gold">
+      <div class="card-title">Your Status</div>
+      <div id="lobby-player-info" style="margin-bottom:12px;"></div>
+      <div id="lobby-status-btns"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Your Stats</div>
+      <div id="lobby-stats"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Ready Players (<span id="ready-count">0</span>)</div>
+      <div id="ready-players-list"></div>
+    </div>
+  </div>
+
+  <!-- SCORING -->
+  <div id="screen-scoring" class="screen">
+    <div id="scoring-msg"></div>
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-title">Live Game</div>
+      <div id="game-info-bar" style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;"></div>
+      <div id="score-grid"></div>
+      <div id="pending-winner-banner" style="display:none;" class="alert alert-warning"></div>
+    </div>
+    <div id="scorekeeper-section" class="card" style="display:none;">
+      <div class="section-title">Add Frame Score</div>
+      <label>Scorer (player who earned points)</label>
+      <select id="frame-scorer"></select>
+      <label>Points Scored</label>
+      <div class="flex gap-8 mb-8">
+        <button class="btn btn-green btn-full" onclick="setFramePts(1)" id="pts-1-btn">1 Point</button>
+        <button class="btn btn-gold btn-full" onclick="setFramePts(2)" id="pts-2-btn">2 Points</button>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="frame-spock" style="width:auto; margin:0;"> This was a Spock!
+      </label>
+      <button class="btn btn-green btn-full mt-8" onclick="submitFrame()">Record Frame</button>
+    </div>
+    <div class="card">
+      <div class="section-title">Frame History</div>
+      <div id="frame-history-list"></div>
+    </div>
+    <div id="host-confirm-section" class="card red" style="display:none;">
+      <div class="section-title">⚠️ Confirm Game Winner</div>
+      <div id="confirm-winner-info" style="margin-bottom:12px;"></div>
+      <button class="btn btn-green btn-full" onclick="confirmWinner()">Confirm & Finalize Game</button>
+    </div>
+  </div>
+
+  <!-- HOST DASHBOARD -->
+  <div id="screen-host" class="screen">
+    <div id="host-msg"></div>
+    <div class="card gold">
+      <div class="card-title">Tournament Controls</div>
+      <div class="two-col">
+        <button class="btn btn-green btn-full" onclick="showMatchmaking()">Create Game</button>
+        <button class="btn btn-gold btn-full" onclick="showAnnouncement()">Announcement</button>
+      </div>
+      <div class="two-col mt-8">
+        <button class="btn btn-gray btn-full" onclick="loadHostData()">↻ Refresh</button>
+        <button class="btn btn-red btn-full" onclick="manageCode()">Join Code</button>
+      </div>
+      <div class="two-col mt-8">
+        <button class="btn btn-green btn-full" onclick="showTournamentSetup()">⚙️ Tournament Info</button>
+        <button class="btn btn-gold btn-full" onclick="showAwardsPanel()">🏆 Awards</button>
+      </div>
+    </div>
+
+    <div id="tournament-setup-panel" class="card" style="display:none;">
+      <div class="section-title">Tournament Info</div>
+      <label>Tournament Name</label>
+      <input type="text" id="tourn-name" placeholder="e.g. Pavliscak Invitational">
+      <label>Date</label>
+      <input type="date" id="tourn-date">
+      <label>Location <span style="opacity:0.6;">(optional)</span></label>
+      <input type="text" id="tourn-location" placeholder="e.g. Riverside Park">
+      <button class="btn btn-green btn-full" onclick="saveTournamentInfo()">Save Tournament Info</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('tournament-setup-panel').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="awards-panel" class="card" style="display:none;">
+      <div class="section-title">🏆 Assign Awards</div>
+      <p class="text-muted mb-8" style="font-size:0.82rem;">Auto-calculated awards (Grand Champion, Most Wins, etc.) are on the Standings tab. These are host-discretion awards.</p>
+      <div id="awards-list-host"></div>
+      <hr class="divider">
+      <div class="section-title" style="font-size:0.85rem;">Add Custom Award</div>
+      <input type="text" id="custom-award-name" placeholder="Award name (e.g. Unknown Danger)">
+      <div class="autocomplete-wrapper">
+        <input type="text" id="custom-award-player" placeholder="Player name or #..." oninput="searchPlayers(this.value, 'custom-award-player-list')">
+        <div class="autocomplete-list" id="custom-award-player-list"></div>
+      </div>
+      <input type="hidden" id="custom-award-player-id">
+      <button class="btn btn-gold btn-full" onclick="saveCustomAward()">Assign Award</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('awards-panel').style.display='none'">Close</button>
+    </div>
+
+    <div id="matchmaking-panel" class="card" style="display:none;">
+      <div class="section-title">Create New Game</div>
+      <label>Court Number</label>
+      <input type="number" id="mm-court" placeholder="Court #" min="1" max="20" style="margin-bottom:6px;">
+      <p class="text-muted mb-8">Select 4 players:</p>
+      <div id="mm-player-checkboxes"></div>
+      <div id="mm-warning" class="alert alert-warning" style="display:none;"></div>
+      <div id="mm-suggestion" class="alert alert-info" style="display:none;"></div>
+      <button class="btn btn-green btn-full mt-8" onclick="createGame()">Create Game</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('matchmaking-panel').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="announcement-panel" class="card" style="display:none;">
+      <div class="section-title">Post Announcement</div>
+      <textarea id="announcement-text" rows="3" placeholder="Enter announcement..."></textarea>
+      <button class="btn btn-gold btn-full" onclick="postAnnouncement()">Post Announcement</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('announcement-panel').style.display='none'">Cancel</button>
+    </div>
+
+    <div class="section-title">Pending Confirmations</div>
+    <div id="host-pending-games"></div>
+
+    <div class="section-title mt-16">Active Games</div>
+    <div id="host-active-games"></div>
+
+    <div class="section-title mt-16">All Players</div>
+    <div id="host-players-list"></div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div id="screen-leaderboard" class="screen">
+    <div id="tournament-header-card" class="card gold" style="display:none;">
+      <div id="tournament-header-content"></div>
+    </div>
+    <div class="card gold">
+      <div class="card-title">🏆 Standings</div>
+      <p class="text-muted" style="font-size:0.78rem; margin-bottom:8px;">★ = Qualified (3+ games) &nbsp;|&nbsp; Best 3 games count (worst discarded)</p>
+      <div id="leaderboard-list"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">🎯 Award Leaders</div>
+      <div id="awards-list"></div>
+    </div>
+    <div class="card" id="discretionary-awards-card" style="display:none;">
+      <div class="section-title">🌟 Special Awards</div>
+      <div id="discretionary-awards-list"></div>
+    </div>
+  </div>
+
+  <!-- PUBLIC DISPLAY -->
+  <div id="screen-display" style="display:none; background: var(--green-dark); min-height:100vh; color: var(--cream); padding: 0;">
+    <div class="display-header">
+      <div class="display-title">🎯 BOCCE TOURNAMENT</div>
+      <div id="display-time" style="font-size:0.8rem; opacity:0.7; margin-top:4px;"></div>
+    </div>
+    <div style="padding: 0 12px;">
+      <div id="display-announcements" style="margin-bottom:16px;"></div>
+      <div id="display-live-games" style="margin-bottom:16px;"></div>
+      <div id="display-leaderboard" style="margin-bottom:16px;"></div>
+    </div>
+    <div style="text-align:center; padding: 12px; opacity:0.5; font-size:0.75rem;">
+      <button class="btn btn-gray btn-sm" onclick="hideDisplay()">← Back</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ludbsqoetrrnvbjmyhaq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_UkwcXmtxHqh2ypAdbO0AGg_PNHZZ59l';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentPlayer = null;
+let currentGame = null;
+let gameSubscription = null;
+let selectedFramePts = null;
+let rejoinSelected = null;
+let allPlayers = [];
+
+const TABS = [
+  { id: 'lobby', label: '🏠 Lobby', role: 'player' },
+  { id: 'scoring', label: '🎯 My Game', role: 'player' },
+  { id: 'leaderboard', label: '📊 Standings', role: 'player' },
+  { id: 'host', label: '⚙️ Host', role: 'host' },
+];
+
+// ─── INIT ───────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await ensureSchema();
+    const saved = localStorage.getItem('bocce_player_id');
+    if (saved) {
+      const { data } = await db.from('bc_players').select('*').eq('id', saved).single();
+      if (data) { currentPlayer = data; initApp(); return; }
+    }
+  } catch(e) {}
+  document.getElementById('loading').style.display = 'none';
+});
+
+async function ensureSchema() {
+  // Check if tables exist by querying them
+  await db.from('bc_config').select('key').limit(1);
+  document.getElementById('loading').style.display = 'none';
+}
+
+function initApp() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('screen-join').classList.remove('active');
+  document.getElementById('nav').style.display = 'flex';
+  renderNav();
+  showTab('lobby');
+  document.getElementById('ticker-bar').style.display = 'flex';
+  startTicker();
+  subscribeRealtime();
+  loadAllPlayers();
+}
+
+function renderNav() {
+  const tabs = document.getElementById('nav-tabs');
+  const info = document.getElementById('nav-player-info');
+  info.textContent = currentPlayer ? `#${currentPlayer.player_number} ${currentPlayer.first_name}` : '';
+  tabs.innerHTML = TABS
+    .filter(t => t.role !== 'host' || currentPlayer?.is_host)
+    .map(t => `<div class="nav-tab" id="tab-${t.id}" onclick="showTab('${t.id}')">${t.label}</div>`)
+    .join('');
+}
+
+function showTab(id) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const tab = document.getElementById(`tab-${id}`);
+  const screen = document.getElementById(`screen-${id}`);
+  if (tab) tab.classList.add('active');
+  if (screen) screen.classList.add('active');
+  if (id === 'lobby') loadLobby();
+  if (id === 'scoring') loadScoringScreen();
+  if (id === 'leaderboard') loadLeaderboard();
+  if (id === 'host') loadHostData();
+}
+
+// ─── REALTIME ────────────────────────────────────────────
+function subscribeRealtime() {
+  db.channel('bocce-all')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bc_games' }, () => {
+      refreshCurrentTab();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bc_frames' }, () => {
+      refreshCurrentTab();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bc_players' }, () => {
+      loadAllPlayers();
+      refreshCurrentTab();
+    })
+    .subscribe();
+}
+
+function refreshCurrentTab() {
+  const active = document.querySelector('.nav-tab.active');
+  if (!active) return;
+  const id = active.id.replace('tab-', '');
+  if (id === 'lobby') loadLobby();
+  if (id === 'scoring') loadScoringScreen();
+  if (id === 'leaderboard') loadLeaderboard();
+  if (id === 'host') loadHostData();
+  if (document.getElementById('screen-display').style.display !== 'none') loadDisplayData();
+}
+
+// ─── JOIN ────────────────────────────────────────────────
+async function joinTournament() {
+  const first = document.getElementById('join-first').value.trim();
+  const last = document.getElementById('join-last').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  const prefNum = parseInt(document.getElementById('join-preferred-num').value);
+  const msg = document.getElementById('join-msg');
+  if (!first || !last) { showMsg(msg, 'Please enter your first and last name.', 'danger'); return; }
+  if (!code) { showMsg(msg, 'Please enter the tournament join code.', 'danger'); return; }
+  if (document.getElementById('join-preferred-num').value && (prefNum < 1 || prefNum > 999 || isNaN(prefNum))) {
+    showMsg(msg, 'Preferred number must be between 1 and 999.', 'danger'); return;
+  }
+  const { data: cfg } = await db.from('bc_config').select('value').eq('key', 'join_code').single();
+  if (!cfg || cfg.value !== code) { showMsg(msg, 'Invalid join code. Please check with your host.', 'danger'); return; }
+  await loadAllPlayers();
+  const existing = allPlayers.find(p => p.first_name.toLowerCase() === first.toLowerCase() && p.last_name.toLowerCase() === last.toLowerCase());
+  if (existing) { showMsg(msg, 'That name is already taken. If this is you, use "Continue as Selected Player" below.', 'warning'); return; }
+  if (!isNaN(prefNum)) {
+    const taken = allPlayers.find(p => p.player_number === prefNum);
+    if (taken) { showMsg(msg, `#${prefNum} is already taken by ${taken.first_name} ${taken.last_name}. Choose another or leave blank.`, 'warning'); return; }
+  }
+  const insertData = { first_name: first, last_name: last, status: 'joined', is_host: false };
+  if (!isNaN(prefNum)) insertData.player_number = prefNum;
+  const { data, error } = await db.from('bc_players').insert(insertData).select().single();
+  if (error) { showMsg(msg, 'Error joining: ' + error.message, 'danger'); return; }
+  currentPlayer = data;
+  localStorage.setItem('bocce_player_id', data.id);
+  initApp();
+}
+
+function searchPlayers(val, listId) {
+  const list = document.getElementById(listId);
+  if (!val || val.length < 1) { list.innerHTML = ''; return; }
+  const matches = allPlayers.filter(p =>
+    `${p.first_name} ${p.last_name}`.toLowerCase().includes(val.toLowerCase()) ||
+    String(p.player_number).startsWith(val)
+  ).slice(0, 8);
+  list.innerHTML = matches.map(p =>
+    `<div class="autocomplete-item" data-id="${p.id}" data-name="#${p.player_number} ${p.first_name} ${p.last_name}" onclick="selectAutocomplete(this, '${listId}')">#${p.player_number} ${p.first_name} ${p.last_name}</div>`
+  ).join('');
+}
+
+function selectAutocomplete(el, listId) {
+  const name = el.dataset.name;
+  const id = el.dataset.id;
+  const list = document.getElementById(listId);
+  list.innerHTML = '';
+  // Find the input associated with this list
+  if (listId === 'rejoin-list') {
+    document.getElementById('rejoin-search').value = name;
+    rejoinSelected = allPlayers.find(p => p.id === id);
+  } else if (listId === 'custom-award-player-list') {
+    document.getElementById('custom-award-player').value = name;
+    document.getElementById('custom-award-player-id').value = id;
+  }
+}
+
+function selectRejoin(p, listId) {
+  rejoinSelected = p;
+  document.getElementById('rejoin-search').value = `#${p.player_number} ${p.first_name} ${p.last_name}`;
+  document.getElementById(listId).innerHTML = '';
+}
+
+function rejoinAs() {
+  if (!rejoinSelected) { alert('Please search and select your name first.'); return; }
+  currentPlayer = rejoinSelected;
+  localStorage.setItem('bocce_player_id', rejoinSelected.id);
+  initApp();
+}
+
+async function loadAllPlayers() {
+  const { data } = await db.from('bc_players').select('*').order('player_number');
+  allPlayers = data || [];
+}
+
+// ─── LOBBY ───────────────────────────────────────────────
+async function loadLobby() {
+  if (!currentPlayer) return;
+  const { data: me } = await db.from('bc_players').select('*').eq('id', currentPlayer.id).single();
+  if (me) currentPlayer = me;
+  const info = document.getElementById('lobby-player-info');
+  info.innerHTML = `<strong>#${me.player_number} ${me.first_name} ${me.last_name}</strong><br>
+    Status: <span class="badge badge-${me.status === 'ready' ? 'green' : me.status === 'playing' ? 'blue' : 'gray'}">${me.status}</span>`;
+  const btns = document.getElementById('lobby-status-btns');
+  if (me.status === 'joined') {
+    btns.innerHTML = `<button class="btn btn-green btn-full" onclick="setReady(true)">✓ Mark Myself Ready</button>`;
+  } else if (me.status === 'ready') {
+    btns.innerHTML = `<button class="btn btn-gray btn-full" onclick="setReady(false)">Not Ready</button>`;
+  } else if (me.status === 'playing') {
+    btns.innerHTML = `<button class="btn btn-gold btn-full" onclick="showTab('scoring')">→ Go to My Game</button>`;
+  }
+  const stats = await getPlayerStats(me.id);
+  const statsEl = document.getElementById('lobby-stats');
+  statsEl.innerHTML = `
+    <div class="two-col">
+      <div><div class="card-title">Games</div><strong>${stats.games}</strong></div>
+      <div><div class="card-title">Wins</div><strong>${stats.wins}</strong></div>
+      <div><div class="card-title">Pts/Frame</div><strong>${stats.ptsPerFrame}</strong></div>
+      <div><div class="card-title">Spocks/Frame</div><strong>${stats.spocksPerFrame}</strong></div>
+    </div>
+    ${stats.games >= 3 ? '<div class="alert alert-success mt-8">★ You are qualified!</div>' : `<div class="text-muted mt-8">Play ${3 - stats.games} more game(s) to qualify</div>`}
+  `;
+  const { data: ready } = await db.from('bc_players').select('*').eq('status', 'ready').order('player_number');
+  document.getElementById('ready-count').textContent = (ready || []).length;
+  document.getElementById('ready-players-list').innerHTML = (ready || []).map(p =>
+    `<div class="player-list-item">
+      <div class="player-avatar">${p.first_name[0]}${p.last_name[0]}</div>
+      <div><strong>#${p.player_number} ${p.first_name} ${p.last_name}</strong></div>
+    </div>`
+  ).join('') || '<p class="text-muted">No players ready yet.</p>';
+}
+
+async function setReady(ready) {
+  await db.from('bc_players').update({ status: ready ? 'ready' : 'joined' }).eq('id', currentPlayer.id);
+  loadLobby();
+}
+
+// ─── SCORING ─────────────────────────────────────────────
+async function loadScoringScreen() {
+  if (!currentPlayer) return;
+  const { data: me } = await db.from('bc_players').select('*').eq('id', currentPlayer.id).single();
+  const msg = document.getElementById('scoring-msg');
+  if (me.status !== 'playing' || !me.current_game_id) {
+    document.getElementById('score-grid').innerHTML = '<p class="text-muted">You are not in an active game.</p>';
+    document.getElementById('scorekeeper-section').style.display = 'none';
+    document.getElementById('host-confirm-section').style.display = 'none';
+    document.getElementById('frame-history-list').innerHTML = '';
+    document.getElementById('game-info-bar').textContent = '';
+    document.getElementById('pending-winner-banner').style.display = 'none';
+    return;
+  }
+  const { data: game } = await db.from('bc_games').select('*').eq('id', me.current_game_id).single();
+  if (!game) return;
+  currentGame = game;
+  const players = await getGamePlayers(game);
+  const frames = await getGameFrames(game.id);
+  const scores = computeScores(players, frames);
+  const maxScore = Math.max(...players.map(p => scores[p.id] || 0));
+  document.getElementById('game-info-bar').innerHTML = `Game #${game.id.slice(-4).toUpperCase()} | Court ${game.court_number || '?'} | ${game.status}`;
+  document.getElementById('score-grid').innerHTML = players.map(p => {
+    const sc = scores[p.id] || 0;
+    const isWinner = sc >= 10;
+    const isLeading = sc === maxScore && sc > 0;
+    return `<div class="score-card ${isWinner ? 'winner' : isLeading ? 'leading' : ''}">
+      <div class="player-num">#${p.player_number}</div>
+      <div class="player-name">${p.first_name} ${p.last_name}</div>
+      <div class="player-score">${sc}</div>
+    </div>`;
+  }).join('');
+  const pw = players.find(p => scores[p.id] >= 10);
+  const pwBanner = document.getElementById('pending-winner-banner');
+  if (pw && game.status === 'live') {
+    pwBanner.style.display = 'block';
+    pwBanner.textContent = `⚠️ ${pw.first_name} ${pw.last_name} has reached 10 points! Awaiting host confirmation.`;
+  } else { pwBanner.style.display = 'none'; }
+  const isScorekeeper = game.scorekeeper_id === currentPlayer.id;
+  const isHost = currentPlayer.is_host;
+  const skSection = document.getElementById('scorekeeper-section');
+  if ((isScorekeeper || isHost) && game.status === 'live' && !pw) {
+    skSection.style.display = 'block';
+    const sel = document.getElementById('frame-scorer');
+    sel.innerHTML = players.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+  } else { skSection.style.display = 'none'; }
+  document.getElementById('frame-history-list').innerHTML = frames.length === 0 ? '<p class="text-muted">No frames yet.</p>' :
+    frames.slice().reverse().map(f => {
+      const scorer = players.find(p => p.id === f.scorer_id);
+      return `<div class="frame-row">
+        <span class="frame-num">#${f.frame_number}</span>
+        <span class="frame-pts">${f.points_scored}pt</span>
+        <span style="flex:1">${scorer ? scorer.first_name : '?'}</span>
+        ${f.is_spock ? '<span class="spock-badge">⭐ Spock</span>' : ''}
+      </div>`;
+    }).join('');
+  const hostConfirm = document.getElementById('host-confirm-section');
+  if (isHost && pw && game.status === 'live') {
+    hostConfirm.style.display = 'block';
+    document.getElementById('confirm-winner-info').innerHTML = `<strong>${pw.first_name} ${pw.last_name}</strong> is the pending winner with ${scores[pw.id]} points in ${frames.length} frames.`;
+  } else { hostConfirm.style.display = 'none'; }
+  // Scorekeeper switch
+  if (isHost && game.status === 'live') {
+    const switchHtml = `<div class="mt-8"><label>Switch Scorekeeper</label><select id="sk-switch" style="margin-bottom:6px;">${players.map(p => `<option value="${p.id}" ${p.id === game.scorekeeper_id ? 'selected' : ''}>${p.first_name} ${p.last_name}</option>`).join('')}</select><button class="btn btn-gray btn-sm" onclick="switchScorekeeper()">Update</button></div>`;
+    skSection.insertAdjacentHTML('beforeend', switchHtml);
+  }
+}
+
+async function getGamePlayers(game) {
+  const ids = [game.player1_id, game.player2_id, game.player3_id, game.player4_id].filter(Boolean);
+  const { data } = await db.from('bc_players').select('*').in('id', ids);
+  return data || [];
+}
+
+async function getGameFrames(gameId) {
+  const { data } = await db.from('bc_frames').select('*').eq('game_id', gameId).order('frame_number');
+  return data || [];
+}
+
+function computeScores(players, frames) {
+  const scores = {};
+  players.forEach(p => scores[p.id] = 0);
+  frames.forEach(f => { if (f.scorer_id in scores) scores[f.scorer_id] += f.points_scored; });
+  return scores;
+}
+
+function setFramePts(pts) {
+  selectedFramePts = pts;
+  document.getElementById('pts-1-btn').style.opacity = pts === 1 ? '1' : '0.5';
+  document.getElementById('pts-2-btn').style.opacity = pts === 2 ? '1' : '0.5';
+}
+
+async function submitFrame() {
+  if (!selectedFramePts) { alert('Please select 1 or 2 points.'); return; }
+  const scorerId = document.getElementById('frame-scorer').value;
+  const isSpock = document.getElementById('frame-spock').checked;
+  const frames = await getGameFrames(currentGame.id);
+  const nextNum = frames.length + 1;
+  const { error } = await db.from('bc_frames').insert({
+    game_id: currentGame.id, frame_number: nextNum, scorer_id: scorerId,
+    points_scored: selectedFramePts, is_spock: isSpock
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  document.getElementById('frame-spock').checked = false;
+  selectedFramePts = null;
+  document.getElementById('pts-1-btn').style.opacity = '1';
+  document.getElementById('pts-2-btn').style.opacity = '1';
+  // Check for winner
+  const newFrames = await getGameFrames(currentGame.id);
+  const { data: game } = await db.from('bc_games').select('*').eq('id', currentGame.id).single();
+  const players = await getGamePlayers(game);
+  const scores = computeScores(players, newFrames);
+  const winner = players.find(p => scores[p.id] >= 10);
+  if (winner) {
+    await db.from('bc_games').update({ pending_winner_id: winner.id }).eq('id', currentGame.id);
+  }
+  loadScoringScreen();
+}
+
+async function confirmWinner() {
+  const { data: game } = await db.from('bc_games').select('*').eq('id', currentGame.id).single();
+  const players = await getGamePlayers(game);
+  const frames = await getGameFrames(game.id);
+  const scores = computeScores(players, frames);
+  const winner = players.find(p => p.id === game.pending_winner_id);
+  if (!winner) { alert('No pending winner.'); return; }
+  await db.from('bc_games').update({ status: 'complete', confirmed_winner_id: winner.id }).eq('id', game.id);
+  for (const p of players) {
+    await db.from('bc_players').update({ status: 'joined', current_game_id: null }).eq('id', p.id);
+  }
+  await autoAnnounce(`🏆 Official result — Court ${game.court_number || '?'}: ${winner.first_name} ${winner.last_name} wins!`);
+  alert(`Game confirmed! ${winner.first_name} ${winner.last_name} wins!`);
+  currentGame = null;
+  loadScoringScreen();
+  loadLeaderboard();
+}
+
+async function switchScorekeeper() {
+  const newSk = document.getElementById('sk-switch').value;
+  await db.from('bc_games').update({ scorekeeper_id: newSk }).eq('id', currentGame.id);
+  loadScoringScreen();
+}
+
+// ─── HOST ────────────────────────────────────────────────
+async function loadHostData() {
+  if (!currentPlayer?.is_host) return;
+  const { data: pending } = await db.from('bc_games').select('*').eq('status', 'live').not('pending_winner_id', 'is', null);
+  const { data: active } = await db.from('bc_games').select('*').eq('status', 'live').is('pending_winner_id', null);
+  const { data: players } = await db.from('bc_players').select('*').order('player_number');
+  document.getElementById('host-pending-games').innerHTML = await renderHostGames(pending || [], true);
+  document.getElementById('host-active-games').innerHTML = await renderHostGames(active || [], false);
+  document.getElementById('host-players-list').innerHTML = (players || []).map(p =>
+    `<div class="player-list-item" id="player-row-${p.id}">
+      <div class="player-avatar">${p.first_name[0]}${p.last_name[0]}</div>
+      <div style="flex:1">
+        <strong>#${p.player_number} ${p.first_name} ${p.last_name}</strong>
+        <span class="badge badge-${p.status === 'ready' ? 'green' : p.status === 'playing' ? 'blue' : 'gray'}" style="margin-left:6px;">${p.status}</span>
+        ${p.is_host ? '<span class="badge badge-gold" style="margin-left:4px;">host</span>' : ''}
+      </div>
+      <button class="btn btn-gray btn-sm" onclick="editPlayer('${p.id}', '${p.first_name}', '${p.last_name}', ${p.player_number})">Edit</button>
+      <button class="btn btn-gray btn-sm" onclick="toggleHost('${p.id}', ${!p.is_host})">${p.is_host ? '−Host' : '+Host'}</button>
+    </div>`
+  ).join('');
+}
+
+async function renderHostGames(games, isPending) {
+  if (!games.length) return '<p class="text-muted">None.</p>';
+  let html = '';
+  for (const g of games) {
+    const players = await getGamePlayers(g);
+    const frames = await getGameFrames(g.id);
+    const scores = computeScores(players, frames);
+    html += `<div class="card ${isPending ? 'red' : ''}">
+      <div style="font-weight:bold; margin-bottom:6px;">Court ${g.court_number || '?'} ${isPending ? '⚠️ Pending Confirmation' : ''}</div>
+      <div style="font-size:0.82rem; margin-bottom:8px;">${players.map(p => `${p.first_name}: <strong>${scores[p.id] || 0}</strong>`).join(' | ')}</div>
+      ${isPending ? `<button class="btn btn-green btn-sm" onclick="hostConfirmGame('${g.id}')">Confirm Winner</button>` : ''}
+      <button class="btn btn-red btn-sm" onclick="cancelGame('${g.id}')" style="margin-left:6px;">Cancel</button>
+    </div>`;
+  }
+  return html;
+}
+
+async function hostConfirmGame(gameId) {
+  currentGame = { id: gameId };
+  const { data: game } = await db.from('bc_games').select('*').eq('id', gameId).single();
+  currentGame = game;
+  await confirmWinner();
+  loadHostData();
+}
+
+async function cancelGame(gameId) {
+  if (!confirm('Cancel this game?')) return;
+  const { data: game } = await db.from('bc_games').select('*').eq('id', gameId).single();
+  await db.from('bc_games').update({ status: 'cancelled' }).eq('id', gameId);
+  const ids = [game.player1_id, game.player2_id, game.player3_id, game.player4_id].filter(Boolean);
+  for (const id of ids) await db.from('bc_players').update({ status: 'joined', current_game_id: null }).eq('id', id);
+  loadHostData();
+}
+
+async function toggleHost(playerId, makeHost) {
+  await db.from('bc_players').update({ is_host: makeHost }).eq('id', playerId);
+  loadHostData();
+}
+
+async function editPlayer(id, first, last, num) {
+  const row = document.getElementById(`player-row-${id}`);
+  row.innerHTML = `
+    <div style="width:100%;">
+      <div class="two-col" style="margin-bottom:6px;">
+        <input id="edit-first-${id}" value="${first}" placeholder="First name" style="margin:0;">
+        <input id="edit-last-${id}" value="${last}" placeholder="Last name" style="margin:0;">
+      </div>
+      <input id="edit-num-${id}" type="number" value="${num}" min="1" max="999" placeholder="Player # (1-999)" style="margin-bottom:6px;">
+      <div class="flex gap-8">
+        <button class="btn btn-green btn-sm" onclick="savePlayerEdit('${id}')">Save</button>
+        <button class="btn btn-gray btn-sm" onclick="loadHostData()">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function savePlayerEdit(id) {
+  const first = document.getElementById(`edit-first-${id}`).value.trim();
+  const last = document.getElementById(`edit-last-${id}`).value.trim();
+  const num = parseInt(document.getElementById(`edit-num-${id}`).value);
+  if (!first || !last) { alert('Name cannot be blank.'); return; }
+  if (isNaN(num) || num < 1 || num > 999) { alert('Number must be 1–999.'); return; }
+  const taken = allPlayers.find(p => p.player_number === num && p.id !== id);
+  if (taken) { alert(`#${num} is already taken by ${taken.first_name} ${taken.last_name}.`); return; }
+  await db.from('bc_players').update({ first_name: first, last_name: last, player_number: num }).eq('id', id);
+  await loadAllPlayers();
+  loadHostData();
+}
+
+function showMatchmaking() {
+  document.getElementById('matchmaking-panel').style.display = 'block';
+  document.getElementById('announcement-panel').style.display = 'none';
+  renderMatchmakingPlayers();
+}
+
+async function renderMatchmakingPlayers() {
+  const { data: ready } = await db.from('bc_players').select('*').eq('status', 'ready').order('player_number');
+  const container = document.getElementById('mm-player-checkboxes');
+  if (!ready || ready.length === 0) {
+    container.innerHTML = '<p class="text-muted">No ready players.</p>'; return;
+  }
+  container.innerHTML = ready.map(p =>
+    `<label style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #eee; cursor:pointer;">
+      <input type="checkbox" class="mm-player-cb" value="${p.id}" style="width:auto; margin:0;">
+      <span>#${p.player_number} ${p.first_name} ${p.last_name}</span>
+    </label>`
+  ).join('');
+  container.addEventListener('change', checkMMSelection);
+  // Suggest groups
+  if (ready.length >= 8) {
+    const suggestion = suggestGroup(ready);
+    document.getElementById('mm-suggestion').style.display = 'block';
+    document.getElementById('mm-suggestion').textContent = `Suggested group: ${suggestion.map(p => p.first_name).join(', ')}`;
+  }
+}
+
+function suggestGroup(readyPlayers) {
+  // Simple: pick first 4 with least recent pairings (basic shuffle for now)
+  const shuffled = [...readyPlayers].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 4);
+}
+
+function checkMMSelection() {
+  const checked = document.querySelectorAll('.mm-player-cb:checked');
+  const warn = document.getElementById('mm-warning');
+  if (checked.length > 4) { warn.style.display = 'block'; warn.textContent = 'Select exactly 4 players.'; }
+  else { warn.style.display = 'none'; }
+}
+
+async function createGame() {
+  const checked = [...document.querySelectorAll('.mm-player-cb:checked')];
+  if (checked.length !== 4) { alert('Select exactly 4 players.'); return; }
+  const court = document.getElementById('mm-court').value;
+  const pids = checked.map(c => c.value);
+  const { data: game, error } = await db.from('bc_games').insert({
+    player1_id: pids[0], player2_id: pids[1], player3_id: pids[2], player4_id: pids[3],
+    scorekeeper_id: pids[0], court_number: court || null, status: 'live'
+  }).select().single();
+  if (error) { alert('Error: ' + error.message); return; }
+  for (const pid of pids) {
+    await db.from('bc_players').update({ status: 'playing', current_game_id: game.id }).eq('id', pid);
+  }
+  document.getElementById('matchmaking-panel').style.display = 'none';
+  const playerNames = checked.map(c => c.closest('label').textContent.trim().split(' ').slice(1).join(' ')).join(', ');
+  await autoAnnounce(`🎯 New game started on Court ${court || 'TBD'} — ${playerNames}`);
+  loadHostData();
+}
+
+function showAnnouncement() {
+  document.getElementById('announcement-panel').style.display = 'block';
+  document.getElementById('matchmaking-panel').style.display = 'none';
+}
+
+async function postAnnouncement() {
+  const text = document.getElementById('announcement-text').value.trim();
+  if (!text) { alert('Enter announcement text.'); return; }
+  await db.from('bc_announcements').insert({ message: text, posted_by: currentPlayer.id });
+  await refreshTickerMessages();
+  document.getElementById('announcement-text').value = '';
+  document.getElementById('announcement-panel').style.display = 'none';
+}
+
+async function manageCode() {
+  const { data } = await db.from('bc_config').select('value').eq('key', 'join_code').single();
+  const current = data?.value || 'Not set';
+  const newCode = prompt(`Current join code: ${current}\n\nEnter new join code (or cancel to keep current):`);
+  if (newCode) {
+    const upper = newCode.trim().toUpperCase();
+    await db.from('bc_config').upsert({ key: 'join_code', value: upper });
+    alert(`Join code set to: ${upper}`);
+  }
+}
+
+async function showTournamentSetup() {
+  document.getElementById('tournament-setup-panel').style.display = 'block';
+  document.getElementById('awards-panel').style.display = 'none';
+  const raw = await getConfig('tournament_info');
+  if (raw) {
+    try {
+      const info = JSON.parse(raw);
+      document.getElementById('tourn-name').value = info.name || '';
+      document.getElementById('tourn-date').value = info.date || '';
+      document.getElementById('tourn-location').value = info.location || '';
+    } catch(e) {}
+  }
+}
+
+async function saveTournamentInfo() {
+  const name = document.getElementById('tourn-name').value.trim();
+  const date = document.getElementById('tourn-date').value;
+  const location = document.getElementById('tourn-location').value.trim();
+  if (!name) { alert('Please enter a tournament name.'); return; }
+  const info = JSON.stringify({ name, date, location });
+  await db.from('bc_config').upsert({ key: 'tournament_info', value: info });
+  document.getElementById('tournament-setup-panel').style.display = 'none';
+  alert('Tournament info saved!');
+  loadLeaderboard();
+}
+
+const PRESET_AWARDS = ['Stylish Performer'];
+
+async function showAwardsPanel() {
+  document.getElementById('awards-panel').style.display = 'block';
+  document.getElementById('tournament-setup-panel').style.display = 'none';
+  const raw = await getConfig('discretionary_awards');
+  const awards = raw ? JSON.parse(raw) : [];
+  const listEl = document.getElementById('awards-list-host');
+  const allAwardNames = [...new Set([...PRESET_AWARDS, ...awards.map(a => a.award)])];
+  listEl.innerHTML = allAwardNames.map(awardName => {
+    const assigned = awards.find(a => a.award === awardName);
+    return `<div style="padding:8px 0; border-bottom:1px solid #eee;">
+      <div style="font-weight:bold; font-size:0.85rem; margin-bottom:4px;">🌟 ${awardName}</div>
+      ${assigned ? `<div style="font-size:0.82rem; color:var(--green-dark);">→ ${assigned.player_name}</div>
+        <button class="btn btn-gray btn-sm mt-8" onclick="removeAward('${awardName}')">Remove</button>` :
+        `<div class="autocomplete-wrapper">
+          <input type="text" placeholder="Assign player..." oninput="searchPlayers(this.value, 'award-list-${awardName.replace(/\s/g,'-')}')" id="award-input-${awardName.replace(/\s/g,'-')}" style="margin-bottom:4px;">
+          <div class="autocomplete-list" id="award-list-${awardName.replace(/\s/g,'-')}"></div>
+        </div>
+        <input type="hidden" id="award-pid-${awardName.replace(/\s/g,'-')}">
+        <button class="btn btn-gold btn-sm" onclick="assignPresetAward('${awardName}')">Assign</button>`}
+    </div>`;
+  }).join('');
+  // Wire up autocomplete selects for each preset
+  allAwardNames.forEach(awardName => {
+    const key = awardName.replace(/\s/g,'-');
+    const listDiv = document.getElementById(`award-list-${key}`);
+    if (listDiv) {
+      listDiv.addEventListener('click', e => {
+        const item = e.target.closest('.autocomplete-item');
+        if (!item) return;
+        document.getElementById(`award-input-${key}`).value = item.dataset.name;
+        document.getElementById(`award-pid-${key}`).value = item.dataset.id;
+        listDiv.innerHTML = '';
+      });
+    }
+  });
+}
+
+async function assignPresetAward(awardName) {
+  const key = awardName.replace(/\s/g,'-');
+  const playerName = document.getElementById(`award-input-${key}`)?.value.trim();
+  const playerId = document.getElementById(`award-pid-${key}`)?.value;
+  if (!playerName) { alert('Please select a player.'); return; }
+  await saveAward(awardName, playerName, playerId);
+  showAwardsPanel();
+}
+
+async function saveCustomAward() {
+  const awardName = document.getElementById('custom-award-name').value.trim();
+  const playerName = document.getElementById('custom-award-player').value.trim();
+  const playerId = document.getElementById('custom-award-player-id').value;
+  if (!awardName) { alert('Enter an award name.'); return; }
+  if (!playerName) { alert('Select a player.'); return; }
+  await saveAward(awardName, playerName, playerId);
+  document.getElementById('custom-award-name').value = '';
+  document.getElementById('custom-award-player').value = '';
+  document.getElementById('custom-award-player-id').value = '';
+  showAwardsPanel();
+}
+
+async function saveAward(awardName, playerName, playerId) {
+  const raw = await getConfig('discretionary_awards');
+  let awards = raw ? JSON.parse(raw) : [];
+  awards = awards.filter(a => a.award !== awardName);
+  awards.push({ award: awardName, player_name: playerName, player_id: playerId });
+  await db.from('bc_config').upsert({ key: 'discretionary_awards', value: JSON.stringify(awards) });
+  await autoAnnounce(`🌟 ${awardName}: ${playerName}`);
+  loadLeaderboard();
+}
+
+async function removeAward(awardName) {
+  const raw = await getConfig('discretionary_awards');
+  let awards = raw ? JSON.parse(raw) : [];
+  awards = awards.filter(a => a.award !== awardName);
+  await db.from('bc_config').upsert({ key: 'discretionary_awards', value: JSON.stringify(awards) });
+  showAwardsPanel();
+  loadLeaderboard();
+}
+
+// ─── LEADERBOARD ─────────────────────────────────────────
+async function getConfig(key) {
+  const { data, error } = await db.from('bc_config').select('value').eq('key', key).single();
+  if (error || !data) return null;
+  return data.value;
+}
+
+async function loadLeaderboard() {
+  // Tournament header
+  const headerCard = document.getElementById('tournament-header-card');
+  const headerContent = document.getElementById('tournament-header-content');
+  const tInfoRaw = await getConfig('tournament_info');
+  if (tInfoRaw) {
+    try {
+      const info = JSON.parse(tInfoRaw);
+      const dateStr = info.date ? new Date(info.date + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+      headerCard.style.display = 'block';
+      headerContent.innerHTML = `<div style="text-align:center;">
+        <div style="font-size:1.3rem; font-weight:bold; color:var(--green-dark);">${info.name || ''}</div>
+        ${dateStr ? `<div style="color:var(--text-muted); font-size:0.88rem;">${dateStr}</div>` : ''}
+        ${info.location ? `<div style="color:var(--text-muted); font-size:0.82rem;">📍 ${info.location}</div>` : ''}
+      </div>`;
+    } catch(e) { headerCard.style.display = 'none'; }
+  } else { headerCard.style.display = 'none'; }
+
+  const { data: games } = await db.from('bc_games').select('*').eq('status', 'complete');
+  const { data: frames } = await db.from('bc_frames').select('*');
+  const { data: players } = await db.from('bc_players').select('*').order('player_number');
+  if (!players) return;
+  const stats = players.map(p => computePlayerStats(p, games || [], frames || []));
+  stats.sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return b.ptsPerFrame - a.ptsPerFrame;
+  });
+  const qualified = stats.filter(s => s.gamesPlayed >= 3);
+  document.getElementById('leaderboard-list').innerHTML = stats.map((s, i) =>
+    `<div class="lb-row ${s.gamesPlayed >= 3 ? 'qualified' : ''}">
+      <div class="lb-rank">${i + 1}</div>
+      <div style="flex:1">
+        <div class="lb-name">#${s.player.player_number} ${s.player.first_name} ${s.player.last_name}</div>
+        <div class="lb-stats">${s.gamesPlayed} games | ${s.wins} wins | ${s.ptsPerFrame} pts/frame | ${s.spocksPerFrame} spocks/frame</div>
+      </div>
+    </div>`
+  ).join('') || '<p class="text-muted">No completed games yet.</p>';
+
+  const awardsEl = document.getElementById('awards-list');
+  if (qualified.length === 0) { awardsEl.innerHTML = '<p class="text-muted">No qualified players yet.</p>'; }
+  else {
+    const gc = qualified[0];
+    const mostWins = [...qualified].sort((a, b) => b.wins - a.wins)[0];
+    const topRatio = [...qualified].sort((a, b) => b.ptsPerFrame - a.ptsPerFrame)[0];
+    const spockmaster = [...qualified].sort((a, b) => b.spocksPerFrame - a.spocksPerFrame)[0];
+    const formidable = qualified.slice(1, 4);
+    awardsEl.innerHTML = `
+      <div class="card gold"><strong>🏆 Grand Champion:</strong> ${gc.player.first_name} ${gc.player.last_name} (${gc.wins}W, ${gc.ptsPerFrame} p/f)</div>
+      <div class="card"><strong>🥇 Most Wins:</strong> ${mostWins.player.first_name} ${mostWins.player.last_name} (${mostWins.wins} wins)</div>
+      <div class="card"><strong>📈 Top Pts/Frame:</strong> ${topRatio.player.first_name} ${topRatio.player.last_name} (${topRatio.ptsPerFrame})</div>
+      <div class="card"><strong>⭐ Spockmaster:</strong> ${spockmaster.player.first_name} ${spockmaster.player.last_name} (${spockmaster.spocksPerFrame} spocks/f)</div>
+      ${formidable.length ? `<div class="card"><strong>💪 Formidable Opponents:</strong> ${formidable.map(f => f.player.first_name + ' ' + f.player.last_name).join(', ')}</div>` : ''}
+    `;
+  }
+
+  // Discretionary awards
+  const discCard = document.getElementById('discretionary-awards-card');
+  const discList = document.getElementById('discretionary-awards-list');
+  const dAwardsRaw = await getConfig('discretionary_awards');
+  if (dAwardsRaw) {
+    try {
+      const list = JSON.parse(dAwardsRaw);
+      if (list.length > 0) {
+        discCard.style.display = 'block';
+        discList.innerHTML = list.map(a =>
+          `<div class="card"><strong>🌟 ${a.award}:</strong> ${a.player_name}</div>`
+        ).join('');
+      } else { discCard.style.display = 'none'; }
+    } catch(e) { discCard.style.display = 'none'; }
+  } else { discCard.style.display = 'none'; }
+}
+
+function computePlayerStats(player, games, frames) {
+  const myGames = games.filter(g =>
+    [g.player1_id, g.player2_id, g.player3_id, g.player4_id].includes(player.id)
+  );
+  const gameStats = myGames.map(g => {
+    const gFrames = frames.filter(f => f.game_id === g.id);
+    const myFrames = gFrames.filter(f => f.scorer_id === player.id);
+    const pts = myFrames.reduce((s, f) => s + f.points_scored, 0);
+    const spocks = myFrames.filter(f => f.is_spock).length;
+    const totalFrames = gFrames.length;
+    const won = g.confirmed_winner_id === player.id;
+    return { won, pts, spocks, totalFrames, ptsPerFrame: totalFrames ? pts / totalFrames : 0, spocksPerFrame: totalFrames ? spocks / totalFrames : 0 };
+  });
+
+  // Discard worst game: keep wins, then discard worst loss by pts/frame impact
+  let best = gameStats;
+  if (gameStats.length > 3) {
+    const wins = gameStats.filter(g => g.won);
+    const losses = gameStats.filter(g => !g.won);
+    if (losses.length > 0) {
+      losses.sort((a, b) => a.ptsPerFrame - b.ptsPerFrame);
+      losses.shift();
+      best = [...wins, ...losses];
+    } else {
+      // All wins — discard the one whose removal most improves pts/frame
+      let bestSet = null, bestRatio = -1;
+      for (let i = 0; i < gameStats.length; i++) {
+        const subset = gameStats.filter((_, j) => j !== i);
+        const totalPts = subset.reduce((s, g) => s + g.pts, 0);
+        const totalFrames = subset.reduce((s, g) => s + g.totalFrames, 0);
+        const ratio = totalFrames ? totalPts / totalFrames : 0;
+        if (ratio > bestRatio) { bestRatio = ratio; bestSet = subset; }
+      }
+      best = bestSet || gameStats;
+    }
+    if (best.length > 3) best = best.slice(0, 3);
+  }
+
+  const wins = best.filter(g => g.won).length;
+  const totalPts = best.reduce((s, g) => s + g.pts, 0);
+  const totalFrames = best.reduce((s, g) => s + g.totalFrames, 0);
+  const totalSpocks = best.reduce((s, g) => s + g.spocks, 0);
+  return {
+    player, gamesPlayed: myGames.length,
+    wins, totalPts, totalFrames, totalSpocks,
+    ptsPerFrame: totalFrames ? parseFloat((totalPts / totalFrames).toFixed(3)) : 0,
+    spocksPerFrame: totalFrames ? parseFloat((totalSpocks / totalFrames).toFixed(3)) : 0
+  };
+}
+
+async function getPlayerStats(playerId) {
+  const { data: games } = await db.from('bc_games').select('*').eq('status', 'complete');
+  const { data: frames } = await db.from('bc_frames').select('*');
+  const { data: player } = await db.from('bc_players').select('*').eq('id', playerId).single();
+  const s = computePlayerStats(player, games || [], frames || []);
+  return { games: s.gamesPlayed, wins: s.wins, ptsPerFrame: s.ptsPerFrame, spocksPerFrame: s.spocksPerFrame };
+}
+
+// ─── DISPLAY ─────────────────────────────────────────────
+function showDisplay() {
+  document.getElementById('screen-display').style.display = 'block';
+  document.getElementById('nav').style.display = 'none';
+  loadDisplayData();
+  setInterval(loadDisplayData, 15000);
+  setInterval(() => {
+    document.getElementById('display-time').textContent = new Date().toLocaleTimeString();
+  }, 1000);
+}
+
+function hideDisplay() {
+  document.getElementById('screen-display').style.display = 'none';
+  document.getElementById('nav').style.display = 'flex';
+}
+
+async function loadDisplayData() {
+  const { data: games } = await db.from('bc_games').select('*').eq('status', 'live');
+  const { data: frames } = await db.from('bc_frames').select('*');
+  const { data: announcements } = await db.from('bc_announcements').select('*').order('created_at', { ascending: false }).limit(5);
+  const { data: allGames } = await db.from('bc_games').select('*').eq('status', 'complete');
+  const { data: allFrames } = await db.from('bc_frames').select('*');
+  const { data: players } = await db.from('bc_players').select('*');
+  // Announcements
+  document.getElementById('display-announcements').innerHTML = (announcements || []).length ?
+    `<div style="margin-bottom:8px; color:var(--gold-light); font-size:0.85rem; text-transform:uppercase; letter-spacing:1px;">📢 Announcements</div>` +
+    (announcements || []).map(a => `<div class="announcement-item">${a.message}</div>`).join('') : '';
+  // Live Games
+  let liveHtml = `<div style="margin-bottom:8px; color:var(--gold-light); font-size:0.85rem; text-transform:uppercase; letter-spacing:1px;">🎯 Live Games</div>`;
+  if (!games || games.length === 0) { liveHtml += '<p style="opacity:0.6; font-size:0.85rem;">No games currently active.</p>'; }
+  else {
+    for (const g of games) {
+      const ps = await getGamePlayers(g);
+      const gf = (frames || []).filter(f => f.game_id === g.id);
+      const scores = computeScores(ps, gf);
+      const hasPending = g.pending_winner_id;
+      liveHtml += `<div class="live-game-card">
+        <div class="live-game-title">Court ${g.court_number || '?'} ${hasPending ? '⏳ AWAITING CONFIRMATION' : ''}</div>
+        <div class="live-scores">${ps.map(p => `<div class="live-score-box"><div class="lsb-name">${p.first_name}</div><div class="lsb-pts">${scores[p.id] || 0}</div></div>`).join('')}</div>
+      </div>`;
+    }
+  }
+  document.getElementById('display-live-games').innerHTML = liveHtml;
+  // Leaderboard
+  if (players && allGames) {
+    const stats = players.map(p => computePlayerStats(p, allGames, allFrames || []));
+    stats.sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.ptsPerFrame - a.ptsPerFrame);
+    const top = stats.slice(0, 10);
+    document.getElementById('display-leaderboard').innerHTML = `
+      <div style="margin-bottom:8px; color:var(--gold-light); font-size:0.85rem; text-transform:uppercase; letter-spacing:1px;">📊 Standings</div>
+      ${top.map((s, i) => `<div style="display:flex; gap:10px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.1); font-size:0.85rem;">
+        <span style="min-width:22px; color:var(--gold-light); font-weight:bold;">${i + 1}</span>
+        <span style="flex:1;">${s.gamesPlayed >= 3 ? '★ ' : ''}${s.player.first_name} ${s.player.last_name}</span>
+        <span style="opacity:0.7;">${s.wins}W | ${s.ptsPerFrame}p/f</span>
+      </div>`).join('')}
+    `;
+  }
+}
+
+function switchPlayer() {
+  if (!confirm('Switch to a different player?')) return;
+  localStorage.removeItem('bocce_player_id');
+  currentPlayer = null;
+  currentGame = null;
+  document.getElementById('nav').style.display = 'none';
+  document.getElementById('ticker-bar').style.display = 'none';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-join').classList.add('active');
+  document.getElementById('join-first').value = '';
+  document.getElementById('join-last').value = '';
+  document.getElementById('join-code').value = '';
+}
+
+
+let tickerMessages = [];
+let tickerIndex = 0;
+
+async function startTicker() {
+  await refreshTickerMessages();
+  setInterval(async () => { await refreshTickerMessages(); }, 30000);
+  setInterval(rotateTicker, 5000);
+}
+
+async function refreshTickerMessages() {
+  const { data } = await db.from('bc_announcements').select('*').order('created_at', { ascending: false }).limit(3);
+  if (data && data.length > 0) tickerMessages = data.map(a => a.message);
+  else tickerMessages = ['Welcome to the Bocce Tournament!'];
+  rotateTicker();
+}
+
+function rotateTicker() {
+  if (!tickerMessages.length) return;
+  const el = document.getElementById('ticker-msg');
+  if (!el) return;
+  el.style.opacity = '0';
+  setTimeout(() => {
+    el.textContent = tickerMessages[tickerIndex % tickerMessages.length];
+    el.style.opacity = '1';
+    tickerIndex++;
+  }, 500);
+}
+
+// ─── AUTO-ANNOUNCEMENTS ───────────────────────────────────
+let lastAnnouncementTime = 0;
+const MIN_ANNOUNCE_GAP = 2 * 60 * 1000; // 2 minutes
+
+async function autoAnnounce(message) {
+  const now = Date.now();
+  if (now - lastAnnouncementTime < MIN_ANNOUNCE_GAP) return;
+  lastAnnouncementTime = now;
+  await db.from('bc_announcements').insert({ message, posted_by: currentPlayer?.id || null });
+  await refreshTickerMessages();
+}
+
+
+function showMsg(el, msg, type) {
+  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(() => { el.innerHTML = ''; }, 4000);
+}
+</script>
+</body>
+</html>
