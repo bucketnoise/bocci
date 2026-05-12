@@ -1,0 +1,2423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bocce Tournament</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --green: #2d6a4f; --green-light: #52b788; --green-dark: #1b4332;
+    --gold: #d4a017; --gold-light: #f4c842; --gold-dark: #a37800;
+    --cream: #fefae0; --cream-dark: #e9dfc3;
+    --brown: #5c3d1e; --brown-light: #8b5e3c;
+    --red: #c1121f; --blue: #1d6fa4; --gray: #6c757d;
+    --white: #fff; --text: #1a1a1a; --text-muted: #555;
+    --radius: 12px; --shadow: 0 2px 12px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Georgia', serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+  
+  /* NAV */
+  #nav { background: var(--green-dark); color: var(--gold-light); padding: 0; display: flex; flex-direction: column; }
+  #nav-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+  #nav-title { font-size: 1.1rem; font-weight: bold; letter-spacing: 1px; }
+  #nav-player-info { font-size: 0.78rem; opacity: 0.85; }
+  #nav-tabs { display: flex; overflow-x: auto; background: var(--green); }
+  .nav-tab { padding: 10px 14px; font-size: 0.78rem; cursor: pointer; white-space: nowrap; border-bottom: 3px solid transparent; color: #cce; transition: all 0.2s; font-family: Georgia, serif; }
+  .nav-tab.active { border-bottom-color: var(--gold-light); color: var(--gold-light); background: var(--green-dark); }
+  .nav-tab:hover { background: var(--green-dark); }
+
+  /* SCREENS */
+  .screen { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
+  .screen.active { display: block; }
+
+  /* CARDS */
+  .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; border-left: 4px solid var(--green); }
+  .card.gold { border-left-color: var(--gold); }
+  .card.red { border-left-color: var(--red); }
+  .card-title { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .card h2 { font-size: 1.2rem; color: var(--green-dark); margin-bottom: 10px; }
+
+  /* FORMS */
+  input, select, textarea { width: 100%; padding: 10px 12px; border: 1.5px solid #ccc; border-radius: 8px; font-size: 1rem; font-family: Georgia, serif; background: var(--white); color: var(--text); margin-bottom: 10px; }
+  input:focus, select:focus { outline: none; border-color: var(--green); }
+  label { font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
+
+  /* BUTTONS */
+  .btn { display: inline-block; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.95rem; font-family: Georgia, serif; font-weight: bold; transition: all 0.2s; text-align: center; }
+  .btn-green { background: var(--green); color: var(--white); }
+  .btn-green:hover { background: var(--green-dark); }
+  .btn-gold { background: var(--gold); color: var(--white); }
+  .btn-gold:hover { background: var(--gold-dark); }
+  .btn-red { background: var(--red); color: var(--white); }
+  .btn-gray { background: var(--gray); color: var(--white); }
+  .btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+  .btn-full { width: 100%; display: block; margin-bottom: 8px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* BADGES */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.72rem; font-weight: bold; }
+  .badge-green { background: #d4edda; color: #155724; }
+  .badge-gold { background: #fff3cd; color: #856404; }
+  .badge-red { background: #f8d7da; color: #721c24; }
+  .badge-blue { background: #d1ecf1; color: #0c5460; }
+  .badge-gray { background: #e2e3e5; color: #383d41; }
+
+  /* LEADERBOARD */
+  .lb-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eee; }
+  .lb-rank { font-size: 1.2rem; font-weight: bold; color: var(--green-dark); min-width: 30px; }
+  .lb-name { flex: 1; font-weight: bold; }
+  .lb-stats { font-size: 0.78rem; color: var(--text-muted); }
+  .lb-row.qualified .lb-name::after { content: ' ★'; color: var(--gold); }
+
+  /* SCORING */
+  #score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .score-card { background: var(--white); border-radius: var(--radius); padding: 14px; text-align: center; box-shadow: var(--shadow); border: 2px solid transparent; }
+  .score-card.leading { border-color: var(--gold); }
+  .score-card.winner { border-color: var(--green); background: #eafaf1; }
+  .score-card .player-name { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .score-card .player-score { font-size: 2.2rem; font-weight: bold; color: var(--green-dark); }
+  .score-card .player-num { font-size: 0.72rem; color: var(--gray); }
+
+  /* FRAME LOG */
+  .frame-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem; }
+  .frame-num { min-width: 24px; font-weight: bold; color: var(--green-dark); }
+  .frame-pts { font-weight: bold; }
+  .spock-badge { color: var(--gold-dark); font-size: 0.75rem; }
+
+  /* PUBLIC DISPLAY */
+  #display-screen { background: var(--green-dark); min-height: 100vh; color: var(--cream); padding: 0; }
+  #display-screen .screen { max-width: 100%; padding: 12px; }
+  .display-header { text-align: center; padding: 16px; border-bottom: 2px solid var(--gold); margin-bottom: 16px; }
+  .display-title { font-size: 1.6rem; color: var(--gold-light); letter-spacing: 2px; }
+  .live-game-card { background: rgba(255,255,255,0.08); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.15); }
+  .live-game-title { font-size: 0.78rem; color: var(--gold-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .live-scores { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .live-score-box { text-align: center; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; }
+  .live-score-box .lsb-name { font-size: 0.75rem; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .live-score-box .lsb-pts { font-size: 1.8rem; font-weight: bold; color: var(--gold-light); }
+  .announcement-item { padding: 8px 12px; background: rgba(255,255,255,0.06); border-radius: 8px; margin-bottom: 6px; font-size: 0.88rem; border-left: 3px solid var(--gold); }
+
+  /* UTILS */
+  .flex { display: flex; }
+  .gap-8 { gap: 8px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-16 { margin-bottom: 16px; }
+  .text-center { text-align: center; }
+  .text-muted { color: var(--text-muted); font-size: 0.85rem; }
+  .section-title { font-size: 1rem; font-weight: bold; color: var(--green-dark); margin-bottom: 10px; border-bottom: 2px solid var(--cream-dark); padding-bottom: 6px; }
+  .alert { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 0.88rem; }
+  .alert-success { background: #d4edda; color: #155724; }
+  .alert-danger { background: #f8d7da; color: #721c24; }
+  .alert-info { background: #d1ecf1; color: #0c5460; }
+  .alert-warning { background: #fff3cd; color: #856404; }
+  .divider { border: none; border-top: 1px solid var(--cream-dark); margin: 14px 0; }
+  #loading { position: fixed; inset: 0; background: var(--green-dark); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; z-index: 1000; }
+  #loading h1 { color: var(--gold-light); font-size: 1.6rem; letter-spacing: 2px; }
+  #loading p { color: #aaa; font-size: 0.9rem; }
+  .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top-color: var(--gold-light); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .player-list-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; }
+  .player-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--green); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; flex-shrink: 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .autocomplete-wrapper { position: relative; }
+  .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1.5px solid var(--green); border-top: none; border-radius: 0 0 8px 8px; z-index: 100; max-height: 180px; overflow-y: auto; }
+  .autocomplete-item { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; }
+  .autocomplete-item:hover { background: var(--cream); }
+  #pending-banner { background: var(--gold); color: var(--brown); padding: 10px 16px; font-size: 0.88rem; font-weight: bold; display: none; }
+  #ticker-bar { background: var(--green-dark); color: var(--gold-light); padding: 7px 16px; font-size: 0.82rem; display: flex; align-items: center; gap: 10px; min-height: 32px; overflow: hidden; }
+  #ticker-bar .ticker-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; white-space: nowrap; }
+  #ticker-msg { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.5s; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <h1>🎯 Bocce Tournament</h1>
+  <p>Connecting...</p>
+</div>
+
+<div id="nav" style="display:none">
+  <div id="nav-header">
+    <span id="nav-title">🎯 Bocce Tournament</span>
+    <span style="display:flex; align-items:center; gap:8px;">
+      <span id="nav-player-info"></span>
+      <button onclick="switchPlayer()" style="background:rgba(255,255,255,0.15); border:none; color:var(--gold-light); font-size:0.72rem; padding:4px 8px; border-radius:6px; cursor:pointer;">Switch</button>
+    </span>
+  </div>
+  <div id="nav-tabs"></div>
+</div>
+<div id="ticker-bar" style="display:none;">
+  <span class="ticker-label">📢</span>
+  <span id="ticker-msg">Welcome to the Bocce Tournament!</span>
+</div>
+
+<div id="screens">
+  <!-- JOIN -->
+  <div id="screen-join" class="screen active">
+    <div style="text-align:center; padding: 20px 0 10px;">
+      <div style="font-size: 3rem;">🎯</div>
+      <h1 style="color: var(--green-dark); font-size: 1.6rem; margin-bottom: 4px;">Bocce Tournament</h1>
+      <div id="join-tournament-name" style="color:var(--text-muted); font-size:0.9rem; margin-bottom:4px;"></div>
+    </div>
+
+    <!-- RETURNING PLAYER -->
+    <div class="card gold">
+      <div class="card-title">Returning Player</div>
+      <p class="text-muted mb-8" style="font-size:0.85rem;">Already played before? Find your name and re-register.</p>
+      <div id="join-msg-return"></div>
+      <div class="autocomplete-wrapper">
+        <input type="text" id="rejoin-search" placeholder="Type name or player #..." oninput="searchPlayers(this.value, 'rejoin-list')">
+        <div class="autocomplete-list" id="rejoin-list"></div>
+      </div>
+      <input type="hidden" id="rejoin-selected-id">
+      <label>Tournament Join Code</label>
+      <input type="text" id="rejoin-code" placeholder="Enter join code" style="text-transform:uppercase; letter-spacing:2px;">
+      <button class="btn btn-gold btn-full" onclick="reregisterPlayer()">Re-register for This Tournament</button>
+    </div>
+
+    <!-- NEW PLAYER -->
+    <div class="card">
+      <div class="card-title">New Player</div>
+      <div id="join-msg"></div>
+      <label>First Name</label>
+      <input type="text" id="join-first" placeholder="First name" autocomplete="given-name">
+      <label>Last Name</label>
+      <input type="text" id="join-last" placeholder="Last name" autocomplete="family-name">
+      <label>Tournament Join Code</label>
+      <input type="text" id="join-code" placeholder="Enter join code" autocomplete="off" style="text-transform:uppercase; letter-spacing:2px;">
+      <label>Preferred Player Number <span style="opacity:0.6;">(optional, 1–999)</span></label>
+      <input type="number" id="join-preferred-num" placeholder="Leave blank to auto-assign" min="1" max="999">
+      <button class="btn btn-green btn-full" onclick="joinTournament()">Join as New Player</button>
+    </div>
+  </div>
+
+  <!-- LOBBY -->
+  <div id="screen-lobby" class="screen">
+    <div id="lobby-msg"></div>
+    <div class="card gold">
+      <div class="card-title">Your Status</div>
+      <div id="lobby-player-info" style="margin-bottom:12px;"></div>
+      <div id="lobby-status-btns"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Your Stats</div>
+      <div id="lobby-stats"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Ready Players (<span id="ready-count">0</span>)</div>
+      <div id="ready-players-list"></div>
+    </div>
+  </div>
+
+  </div>
+
+  <!-- PROFILE -->
+  <div id="screen-profile" class="screen">
+    <div id="profile-msg"></div>
+
+    <!-- Photo section -->
+    <div class="card" style="text-align:center;">
+      <div class="card-title">Profile Photo</div>
+      <div id="profile-photo-display" style="margin: 10px auto 14px;">
+        <div id="profile-avatar-large" style="width:100px; height:100px; border-radius:50%; background:var(--green); color:white; display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:bold; margin:0 auto;"></div>
+      </div>
+      <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none;" onchange="handlePhotoUpload(event)">
+      <button class="btn btn-green" onclick="document.getElementById('photo-input').click()">📷 Take / Upload Photo</button>
+      <div id="photo-upload-status" style="font-size:0.78rem; color:var(--text-muted); margin-top:6px;"></div>
+    </div>
+
+    <!-- Questionnaire -->
+    <div class="card">
+      <div class="card-title">About You <span style="opacity:0.6; font-size:0.78rem;">(all optional)</span></div>
+
+      <label>Nickname</label>
+      <input type="text" id="pq-nickname" placeholder="What do they call you?">
+
+      <label>Profession</label>
+      <input type="text" id="pq-profession" placeholder="What do you do?">
+
+      <label>Dream Profession</label>
+      <input type="text" id="pq-dream-profession" placeholder="What would you do?">
+
+      <label>Hometown</label>
+      <input type="text" id="pq-hometown" placeholder="Where are you from?">
+
+      <label>Dream Hometown</label>
+      <input type="text" id="pq-dream-hometown" placeholder="Where would you live?">
+
+      <label>What phrase best describes you?</label>
+      <input type="text" id="pq-phrase" placeholder="Your personal motto...">
+
+      <label>Favorite Food</label>
+      <input type="text" id="pq-food" placeholder="">
+
+      <label>Favorite Beverage</label>
+      <input type="text" id="pq-beverage" placeholder="">
+
+      <label>Lucky Number</label>
+      <input type="text" id="pq-lucky-number" placeholder="">
+
+      <label>Favorite Car</label>
+      <input type="text" id="pq-car" placeholder="">
+
+      <label>Boat, Balloon, Skis, or Gun?</label>
+      <input type="text" id="pq-boat-balloon" placeholder="Pick one or explain...">
+
+      <label>Signature Bocce Move</label>
+      <input type="text" id="pq-signature-move" placeholder="What's your go-to?">
+
+      <label>Power, Lob, or Finesse?</label>
+      <select id="pq-style">
+        <option value="">— Select —</option>
+        <option>Power</option>
+        <option>Lob</option>
+        <option>Finesse</option>
+        <option>Depends on the situation</option>
+      </select>
+
+      <label>Bocce Experience (overall)</label>
+      <select id="pq-experience">
+        <option value="">— Select —</option>
+        <option>First time ever</option>
+        <option>A few games</option>
+        <option>A few seasons</option>
+        <option>Many years</option>
+        <option>Seasoned veteran</option>
+      </select>
+
+      <label>Bocce Experience at this tournament</label>
+      <select id="pq-tourn-experience">
+        <option value="">— Select —</option>
+        <option>First time here</option>
+        <option>Second year</option>
+        <option>Third year</option>
+        <option>Four or more years</option>
+      </select>
+
+      <label>One word you'd use to describe yourself in Bocce terms</label>
+      <input type="text" id="pq-self-word" placeholder="e.g. Lethal, Crafty, Unpredictable...">
+
+      <label>One word others might use to describe you in Bocce terms</label>
+      <input type="text" id="pq-other-word" placeholder="Be honest...">
+
+      <label>Why?</label>
+      <textarea id="pq-why" rows="3" placeholder="Explain yourself..."></textarea>
+
+      <button class="btn btn-green btn-full mt-8" onclick="saveProfile()">Save Profile</button>
+    </div>
+
+    <!-- Trophy Case -->
+    <div class="card gold" id="trophy-case-card" style="display:none;">
+      <div class="card-title">🏆 Trophy Case</div>
+      <div id="trophy-case-list"></div>
+    </div>
+  </div>
+
+  <!-- SCORING -->
+  <div id="screen-scoring" class="screen">
+    <div id="scoring-msg"></div>
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-title">Live Game</div>
+      <div id="game-info-bar" style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;"></div>
+      <div id="score-grid"></div>
+      <div id="pending-winner-banner" style="display:none;" class="alert alert-warning"></div>
+    </div>
+    <div id="scorekeeper-section" class="card" style="display:none;">
+      <div class="section-title">Add Frame Score</div>
+      <label>Scorer (player who earned points)</label>
+      <select id="frame-scorer"></select>
+      <label>Points Scored</label>
+      <div class="flex gap-8 mb-8">
+        <button class="btn btn-green btn-full" onclick="setFramePts(1)" id="pts-1-btn">1 Point</button>
+        <button class="btn btn-gold btn-full" onclick="setFramePts(2)" id="pts-2-btn">2 Points</button>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="frame-spock" style="width:auto; margin:0;"> This was a Spock!
+      </label>
+      <button class="btn btn-green btn-full mt-8" onclick="submitFrame()">Record Frame</button>
+    </div>
+    <div class="card">
+      <div class="section-title">Frame History</div>
+      <div id="frame-history-list"></div>
+    </div>
+    <div id="host-confirm-section" class="card red" style="display:none;">
+      <div class="section-title">⚠️ Confirm Game Winner</div>
+      <div id="confirm-winner-info" style="margin-bottom:12px;"></div>
+      <button class="btn btn-green btn-full" onclick="confirmWinner()">Confirm & Finalize Game</button>
+    </div>
+  </div>
+
+  <!-- HOST DASHBOARD -->
+  <div id="screen-host" class="screen">
+    <div id="host-msg"></div>
+    <div class="card gold">
+      <div class="card-title">Tournament Controls</div>
+      <div class="two-col">
+        <button class="btn btn-green btn-full" onclick="showMatchmaking()">Create Game</button>
+        <button class="btn btn-gold btn-full" onclick="showAnnouncement()">Announcement</button>
+      </div>
+      <div class="two-col mt-8">
+        <button class="btn btn-gray btn-full" onclick="loadHostData()">↻ Refresh</button>
+        <button class="btn btn-red btn-full" onclick="manageCode()">Join Code</button>
+      </div>
+      <div class="two-col mt-8">
+        <button class="btn btn-green btn-full" onclick="showTournamentSetup()">⚙️ Tournament Info</button>
+        <button class="btn btn-gold btn-full" onclick="showAwardsPanel()">🏆 Awards</button>
+      </div>
+      <div class="two-col mt-8">
+        <button class="btn btn-red btn-full" onclick="showNewTournamentPanel()">🆕 New Tournament</button>
+        <button class="btn btn-gold btn-full" onclick="showPastAwardsPanel()">🎖 Past Awards</button>
+      </div>
+    </div>
+
+    <div id="tournament-setup-panel" class="card" style="display:none;">
+      <div class="section-title">Tournament Info</div>
+      <label>Tournament Name</label>
+      <input type="text" id="tourn-name" placeholder="e.g. Pavliscak Invitational">
+      <label>Date</label>
+      <input type="date" id="tourn-date">
+      <label>Location <span style="opacity:0.6;">(optional)</span></label>
+      <input type="text" id="tourn-location" placeholder="e.g. Riverside Park">
+      <button class="btn btn-green btn-full" onclick="saveTournamentInfo()">Save Tournament Info</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('tournament-setup-panel').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="awards-panel" class="card" style="display:none;">
+      <div class="section-title">🏆 Assign Awards</div>
+      <p class="text-muted mb-8" style="font-size:0.82rem;">Auto-calculated awards (Grand Champion, Most Wins, etc.) are on the Standings tab. These are host-discretion awards.</p>
+      <div id="awards-list-host"></div>
+      <hr class="divider">
+      <div class="section-title" style="font-size:0.85rem;">Add Custom Award</div>
+      <input type="text" id="custom-award-name" placeholder="Award name (e.g. Unknown Danger)">
+      <div class="autocomplete-wrapper">
+        <input type="text" id="custom-award-player" placeholder="Player name or #..." oninput="searchPlayers(this.value, 'custom-award-player-list')">
+        <div class="autocomplete-list" id="custom-award-player-list"></div>
+      </div>
+      <input type="hidden" id="custom-award-player-id">
+      <button class="btn btn-gold btn-full" onclick="saveCustomAward()">Assign Award</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('awards-panel').style.display='none'">Close</button>
+    </div>
+
+    <div id="matchmaking-panel" class="card" style="display:none;">
+      <div class="section-title">Create New Game</div>
+      <label>Court Number</label>
+      <input type="number" id="mm-court" placeholder="Court #" min="1" max="20" style="margin-bottom:6px;">
+      <p class="text-muted mb-8">Select 4 players:</p>
+      <div id="mm-player-checkboxes"></div>
+      <div id="mm-warning" class="alert alert-warning" style="display:none;"></div>
+      <div id="mm-suggestion" class="alert alert-info" style="display:none;"></div>
+      <button class="btn btn-green btn-full mt-8" onclick="createGame()">Create Game</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('matchmaking-panel').style.display='none'">Cancel</button>
+    </div>
+
+    <div id="announcement-panel" class="card" style="display:none;">
+      <div class="section-title">Post Announcement</div>
+      <textarea id="announcement-text" rows="3" placeholder="Enter announcement..."></textarea>
+      <button class="btn btn-gold btn-full" onclick="postAnnouncement()">Post Announcement</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('announcement-panel').style.display='none'">Cancel</button>
+    </div>
+
+    <!-- NEW TOURNAMENT PANEL -->
+    <div id="new-tournament-panel" class="card red" style="display:none;">
+      <div class="section-title">🆕 Start New Tournament</div>
+      <div class="alert alert-warning mb-8">This will archive the current tournament and reset all games, scores, and registrations. Player profiles and history are preserved.</div>
+      <label>New Tournament Name</label>
+      <input type="text" id="new-tourn-name" placeholder="e.g. Ring Game Open">
+      <label>Date</label>
+      <input type="date" id="new-tourn-date">
+      <label>Location <span style="opacity:0.6;">(optional)</span></label>
+      <input type="text" id="new-tourn-location" placeholder="e.g. Riverside Park">
+      <button class="btn btn-red btn-full" onclick="createNewTournament()">Archive Current & Start New Tournament</button>
+      <button class="btn btn-gray btn-full" onclick="document.getElementById('new-tournament-panel').style.display='none'">Cancel</button>
+    </div>
+
+    <!-- PAST AWARDS PANEL -->
+    <div id="past-awards-panel" class="card" style="display:none;">
+      <div class="section-title">🎖 Add Past Tournament Award</div>
+      <p class="text-muted mb-8" style="font-size:0.82rem;">Manually record awards from previous tournaments for player trophy cases.</p>
+      <label>Player</label>
+      <div class="autocomplete-wrapper">
+        <input type="text" id="past-award-player" placeholder="Search player..." oninput="searchPlayers(this.value, 'past-award-player-list')">
+        <div class="autocomplete-list" id="past-award-player-list"></div>
+      </div>
+      <input type="hidden" id="past-award-player-id">
+      <label>Award Name</label>
+      <input type="text" id="past-award-name" placeholder="e.g. Grand Champion">
+      <label>Tournament Name</label>
+      <input type="text" id="past-award-tourn-name" placeholder="e.g. 2024 Pavliscak Invitational">
+      <label>Year</label>
+      <input type="text" id="past-award-year" placeholder="e.g. 2024">
+      <button class="btn btn-gold btn-full" onclick="savePastAward()">Save Past Award</button>
+      <hr class="divider">
+      <div class="section-title" style="font-size:0.85rem;">Recorded Past Awards</div>
+      <div id="past-awards-list-host"></div>
+      <button class="btn btn-gray btn-full mt-8" onclick="document.getElementById('past-awards-panel').style.display='none'">Close</button>
+    </div>
+
+    <div class="section-title">Pending Confirmations</div>
+    <div id="host-pending-games"></div>
+
+    <div class="section-title mt-16">Active Games</div>
+    <div id="host-active-games"></div>
+
+    <div class="section-title mt-16">Registered Players</div>
+    <div id="host-players-list"></div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div id="screen-leaderboard" class="screen">
+    <div id="tournament-header-card" class="card gold" style="display:none;">
+      <div id="tournament-header-content"></div>
+    </div>
+    <div class="card gold">
+      <div class="card-title">🏆 Standings</div>
+      <p class="text-muted" style="font-size:0.78rem; margin-bottom:8px;">★ = Qualified (3+ games) &nbsp;|&nbsp; Best 3 games count (worst discarded)</p>
+      <div id="leaderboard-list"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">🎯 Award Leaders</div>
+      <div id="awards-list"></div>
+    </div>
+    <div class="card" id="discretionary-awards-card" style="display:none;">
+      <div class="section-title">🌟 Special Awards</div>
+      <div id="discretionary-awards-list"></div>
+    </div>
+  </div>
+
+  <!-- PUBLIC DISPLAY -->
+  <div id="screen-display" class="screen" style="padding:0;">
+    <!-- Full-screen rotating display -->
+    <div id="display-fullscreen" style="display:none; position:fixed; inset:0; background:var(--green-dark); color:var(--cream); z-index:999; overflow:hidden; font-family:Georgia,serif;">
+      <!-- Interrupt overlay -->
+      <div id="display-interrupt" style="display:none; position:absolute; inset:0; z-index:10; background:rgba(0,0,0,0.85); display:none; align-items:center; justify-content:center; flex-direction:column; text-align:center; padding:40px;">
+        <div id="interrupt-content"></div>
+      </div>
+      <!-- Main rotating slide -->
+      <div id="display-slide" style="width:100%; height:100%; display:flex; flex-direction:column;"></div>
+      <!-- Bottom bar -->
+      <div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.4); padding:8px 20px; display:flex; align-items:center; justify-content:space-between;">
+        <div id="display-clock" style="font-size:0.85rem; opacity:0.7;"></div>
+        <div id="display-progress-bar" style="flex:1; height:3px; background:rgba(255,255,255,0.15); margin:0 16px; border-radius:2px;">
+          <div id="display-progress-fill" style="height:100%; background:var(--gold-light); border-radius:2px; transition:width linear;"></div>
+        </div>
+        <button onclick="exitDisplay()" style="background:rgba(255,255,255,0.15); border:none; color:white; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.75rem;">Exit</button>
+      </div>
+    </div>
+
+    <!-- Host display control panel -->
+    <div style="max-width:600px; margin:0 auto; padding:16px;">
+      <div class="card gold">
+        <div class="card-title">📺 Display Screen Controls</div>
+        <button class="btn btn-green btn-full" onclick="launchDisplay()">▶ Launch Display</button>
+        <div class="two-col mt-8">
+          <div>
+            <label>Slide Duration (seconds)</label>
+            <input type="number" id="display-duration" value="6" min="3" max="30">
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <button class="btn btn-gold btn-full" onclick="saveDisplaySettings()">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOURNAMENT PHASE CONTROLS -->
+      <div class="card red" id="phase-controls">
+        <div class="section-title">⏱ Tournament Phase Controls</div>
+        <div id="phase-status-display" style="margin-bottom:12px;"></div>
+
+        <!-- Phase 1: Last Game -->
+        <div id="phase1-panel">
+          <div class="card-title">Phase 1 — Last Game Warning</div>
+          <label>Countdown (minutes)</label>
+          <div class="flex gap-8 mb-8">
+            <input type="number" id="last-game-mins" value="30" min="1" max="240" style="margin:0;">
+            <button class="btn btn-red" onclick="startLastGame()">Start Countdown</button>
+          </div>
+          <p class="text-muted" style="font-size:0.78rem;">Announces last game time. No new games after countdown ends.</p>
+        </div>
+        <div id="phase1-active" style="display:none;">
+          <div id="phase1-countdown-display" class="alert alert-warning" style="text-align:center; font-size:1.1rem; font-weight:bold;"></div>
+          <div class="two-col mt-8">
+            <button class="btn btn-gray btn-full" onclick="dismissPhase('last_game')">Dismiss / Reset</button>
+            <button class="btn btn-red btn-full" onclick="startLastScores()">→ Start Last Scores</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Phase 2: Last Score Submission -->
+        <div id="phase2-panel">
+          <div class="card-title">Phase 2 — Last Score Submission</div>
+          <label>Countdown (minutes)</label>
+          <div class="flex gap-8 mb-8">
+            <input type="number" id="last-score-mins" value="15" min="1" max="60" style="margin:0;">
+            <button class="btn btn-red" onclick="startLastScores()">Start Countdown</button>
+          </div>
+          <p class="text-muted" style="font-size:0.78rem;">Scores/standings blacked out on display. Host manually ends remaining games.</p>
+        </div>
+        <div id="phase2-active" style="display:none;">
+          <div id="phase2-countdown-display" class="alert alert-danger" style="text-align:center; font-size:1.1rem; font-weight:bold;"></div>
+          <div class="two-col mt-8">
+            <button class="btn btn-gray btn-full" onclick="dismissPhase('last_scores')">Dismiss / Reset</button>
+            <button class="btn btn-red btn-full" onclick="startTournamentOver()">→ Tournament Over</button>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Phase 3: Tournament Over + Awards -->
+        <div id="phase3-panel">
+          <div class="card-title">Phase 3 — Tournament Over & Awards</div>
+          <button class="btn btn-red btn-full" onclick="startTournamentOver()">Declare Tournament Over</button>
+        </div>
+        <div id="phase3-active" style="display:none;">
+          <div class="alert alert-danger" style="text-align:center; font-weight:bold;">🏁 Tournament Over</div>
+          <div id="awards-checklist" style="margin-top:10px;"></div>
+          <hr class="divider">
+          <div class="card-title mt-8">Awards Ceremony Countdown</div>
+          <label>Minutes until ceremony</label>
+          <div class="flex gap-8 mb-8">
+            <input type="number" id="ceremony-mins" value="20" min="1" max="120" style="margin:0;">
+            <button class="btn btn-gold" onclick="startCeremony()">Start</button>
+          </div>
+          <div id="ceremony-countdown-display" style="display:none;" class="alert alert-warning" style="text-align:center; font-size:1.1rem; font-weight:bold;"></div>
+          <div id="ceremony-active-controls" style="display:none;">
+            <div class="two-col mt-8">
+              <button class="btn btn-gray btn-full" onclick="dismissPhase('ceremony')">Dismiss / Reset</button>
+              <button class="btn btn-gold btn-full" onclick="revealAwards()">🏆 Reveal Awards on Display</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">📸 Upload Photos</div>
+        <div class="two-col mb-8">
+          <button class="btn btn-green btn-full" onclick="document.getElementById('upload-past').click()">+ Past Tournament</button>
+          <button class="btn btn-gold btn-full" onclick="document.getElementById('upload-present').click()">+ Present Tournament</button>
+        </div>
+        <input type="file" id="upload-past" accept="image/*" multiple style="display:none;" onchange="uploadTournamentPhotos(event,'past')">
+        <input type="file" id="upload-present" accept="image/*" multiple style="display:none;" onchange="uploadTournamentPhotos(event,'present')">
+        <div id="photo-upload-progress" style="font-size:0.82rem; color:var(--text-muted);"></div>
+        <div class="section-title mt-16" style="font-size:0.85rem;">Uploaded Photos</div>
+        <div id="display-photo-list" style="max-height:300px; overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ludbsqoetrrnvbjmyhaq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_UkwcXmtxHqh2ypAdbO0AGg_PNHZZ59l';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentPlayer = null;
+let currentGame = null;
+let gameSubscription = null;
+let selectedFramePts = null;
+let rejoinSelected = null;
+let allPlayers = [];
+
+const TABS = [
+  { id: 'lobby', label: '🏠 Lobby', role: 'player' },
+  { id: 'scoring', label: '🎯 My Game', role: 'player' },
+  { id: 'profile', label: '👤 Profile', role: 'player' },
+  { id: 'leaderboard', label: '📊 Standings', role: 'player' },
+  { id: 'host', label: '⚙️ Host', role: 'host' },
+  { id: 'display', label: '📺 Display', role: 'host' },
+];
+
+// ─── INIT ───────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await ensureSchema();
+    loadJoinScreenTournamentName();
+    const saved = localStorage.getItem('bocce_player_id');
+    if (saved) {
+      const { data } = await db.from('bc_players').select('*').eq('id', saved).single();
+      if (data) {
+        // Check if registered for current tournament
+        const registered = await isPlayerRegistered(data.id);
+        if (registered) { currentPlayer = data; initApp(); return; }
+        // Not registered — show join screen with their name pre-filled in returning player
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('rejoin-search').value = `#${data.player_number} ${data.first_name} ${data.last_name}`;
+        document.getElementById('rejoin-selected-id').value = data.id;
+        return;
+      }
+    }
+  } catch(e) {}
+  document.getElementById('loading').style.display = 'none';
+});
+
+async function ensureSchema() {
+  // Check if tables exist by querying them
+  await db.from('bc_config').select('key').limit(1);
+  document.getElementById('loading').style.display = 'none';
+}
+
+function initApp() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('screen-join').classList.remove('active');
+  document.getElementById('nav').style.display = 'flex';
+  renderNav();
+  showTab('lobby');
+  document.getElementById('ticker-bar').style.display = 'flex';
+  startTicker();
+  subscribeRealtime();
+  loadAllPlayers();
+}
+
+function renderNav() {
+  const tabs = document.getElementById('nav-tabs');
+  const info = document.getElementById('nav-player-info');
+  info.textContent = currentPlayer ? `#${currentPlayer.player_number} ${currentPlayer.first_name}` : '';
+  tabs.innerHTML = TABS
+    .filter(t => t.role !== 'host' || currentPlayer?.is_host)
+    .map(t => `<div class="nav-tab" id="tab-${t.id}" onclick="showTab('${t.id}')">${t.label}</div>`)
+    .join('');
+}
+
+function showTab(id) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const tab = document.getElementById(`tab-${id}`);
+  const screen = document.getElementById(`screen-${id}`);
+  if (tab) tab.classList.add('active');
+  if (screen) screen.classList.add('active');
+  if (id === 'lobby') loadLobby();
+  if (id === 'scoring') loadScoringScreen();
+  if (id === 'profile') loadProfile();
+  if (id === 'leaderboard') loadLeaderboard();
+  if (id === 'host') loadHostData();
+  if (id === 'display') loadDisplayPanel();
+}
+
+// ─── REALTIME ────────────────────────────────────────────
+function subscribeRealtime() {
+  db.channel('bocce-all')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bc_games' }, () => {
+      refreshCurrentTab();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bc_frames' }, () => {
+      refreshCurrentTab();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bc_players' }, () => {
+      loadAllPlayers();
+      refreshCurrentTab();
+    })
+    .subscribe();
+}
+
+function refreshCurrentTab() {
+  const active = document.querySelector('.nav-tab.active');
+  if (!active) return;
+  const id = active.id.replace('tab-', '');
+  if (id === 'lobby') loadLobby();
+  if (id === 'scoring') loadScoringScreen();
+  if (id === 'leaderboard') loadLeaderboard();
+  if (id === 'host') loadHostData();
+  if (document.getElementById('screen-display').style.display !== 'none') loadDisplayData();
+}
+
+// ─── JOIN ────────────────────────────────────────────────
+async function joinTournament() {
+  const first = document.getElementById('join-first').value.trim();
+  const last = document.getElementById('join-last').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  const prefNum = parseInt(document.getElementById('join-preferred-num').value);
+  const msg = document.getElementById('join-msg');
+  if (!first || !last) { showMsg(msg, 'Please enter your first and last name.', 'danger'); return; }
+  if (!code) { showMsg(msg, 'Please enter the tournament join code.', 'danger'); return; }
+  if (document.getElementById('join-preferred-num').value && (prefNum < 1 || prefNum > 999 || isNaN(prefNum))) {
+    showMsg(msg, 'Preferred number must be between 1 and 999.', 'danger'); return;
+  }
+  const { data: cfg } = await db.from('bc_config').select('value').eq('key', 'join_code').single();
+  if (!cfg || cfg.value !== code) { showMsg(msg, 'Invalid join code. Please check with your host.', 'danger'); return; }
+  await loadAllPlayers();
+  const existing = allPlayers.find(p => p.first_name.toLowerCase() === first.toLowerCase() && p.last_name.toLowerCase() === last.toLowerCase());
+  if (existing) { showMsg(msg, 'That name is already taken. If this is you, use "Continue as Selected Player" below.', 'warning'); return; }
+  if (!isNaN(prefNum)) {
+    const taken = allPlayers.find(p => p.player_number === prefNum);
+    if (taken) { showMsg(msg, `#${prefNum} is already taken by ${taken.first_name} ${taken.last_name}. Choose another or leave blank.`, 'warning'); return; }
+  }
+  const insertData = { first_name: first, last_name: last, status: 'joined', is_host: false };
+  if (!isNaN(prefNum)) insertData.player_number = prefNum;
+  const { data, error } = await db.from('bc_players').insert(insertData).select().single();
+  if (error) { showMsg(msg, 'Error joining: ' + error.message, 'danger'); return; }
+  currentPlayer = data;
+  localStorage.setItem('bocce_player_id', data.id);
+  initApp();
+}
+
+function searchPlayers(val, listId) {
+  const list = document.getElementById(listId);
+  if (!val || val.length < 1) { list.innerHTML = ''; return; }
+  const matches = allPlayers.filter(p =>
+    `${p.first_name} ${p.last_name}`.toLowerCase().includes(val.toLowerCase()) ||
+    String(p.player_number).startsWith(val)
+  ).slice(0, 8);
+  list.innerHTML = matches.map(p =>
+    `<div class="autocomplete-item" data-id="${p.id}" data-name="#${p.player_number} ${p.first_name} ${p.last_name}" onclick="selectAutocomplete(this, '${listId}')">#${p.player_number} ${p.first_name} ${p.last_name}</div>`
+  ).join('');
+}
+
+function selectAutocomplete(el, listId) {
+  const name = el.dataset.name;
+  const id = el.dataset.id;
+  const list = document.getElementById(listId);
+  list.innerHTML = '';
+  if (listId === 'rejoin-list') {
+    document.getElementById('rejoin-search').value = name;
+    document.getElementById('rejoin-selected-id').value = id;
+    rejoinSelected = allPlayers.find(p => p.id === id);
+  } else if (listId === 'custom-award-player-list') {
+    document.getElementById('custom-award-player').value = name;
+    document.getElementById('custom-award-player-id').value = id;
+  } else if (listId === 'past-award-player-list') {
+    document.getElementById('past-award-player').value = name;
+    document.getElementById('past-award-player-id').value = id;
+  }
+}
+
+function selectRejoin(p, listId) {
+  rejoinSelected = p;
+  document.getElementById('rejoin-search').value = `#${p.player_number} ${p.first_name} ${p.last_name}`;
+  document.getElementById(listId).innerHTML = '';
+}
+
+function rejoinAs() {
+  if (!rejoinSelected) { alert('Please search and select your name first.'); return; }
+  currentPlayer = rejoinSelected;
+  localStorage.setItem('bocce_player_id', rejoinSelected.id);
+  initApp();
+}
+
+async function loadAllPlayers() {
+  const { data } = await db.from('bc_players').select('*').order('player_number');
+  allPlayers = data || [];
+}
+
+// ─── LOBBY ───────────────────────────────────────────────
+async function loadLobby() {
+  if (!currentPlayer) return;
+  const { data: me } = await db.from('bc_players').select('*').eq('id', currentPlayer.id).single();
+  if (me) currentPlayer = me;
+  const info = document.getElementById('lobby-player-info');
+  info.innerHTML = `<strong>#${me.player_number} ${me.first_name} ${me.last_name}</strong><br>
+    Status: <span class="badge badge-${me.status === 'ready' ? 'green' : me.status === 'playing' ? 'blue' : 'gray'}">${me.status}</span>`;
+  const btns = document.getElementById('lobby-status-btns');
+  if (me.status === 'joined') {
+    btns.innerHTML = `<button class="btn btn-green btn-full" onclick="setReady(true)">✓ Mark Myself Ready</button>`;
+  } else if (me.status === 'ready') {
+    btns.innerHTML = `<button class="btn btn-gray btn-full" onclick="setReady(false)">Not Ready</button>`;
+  } else if (me.status === 'playing') {
+    btns.innerHTML = `<button class="btn btn-gold btn-full" onclick="showTab('scoring')">→ Go to My Game</button>`;
+  }
+  const stats = await getPlayerStats(me.id);
+  const statsEl = document.getElementById('lobby-stats');
+  statsEl.innerHTML = `
+    <div class="two-col">
+      <div><div class="card-title">Games</div><strong>${stats.games}</strong></div>
+      <div><div class="card-title">Wins</div><strong>${stats.wins}</strong></div>
+      <div><div class="card-title">Pts/Frame</div><strong>${stats.ptsPerFrame}</strong></div>
+      <div><div class="card-title">Spocks/Frame</div><strong>${stats.spocksPerFrame}</strong></div>
+    </div>
+    ${stats.games >= 3 ? '<div class="alert alert-success mt-8">★ You are qualified!</div>' : `<div class="text-muted mt-8">Play ${3 - stats.games} more game(s) to qualify</div>`}
+  `;
+  const { data: ready } = await db.from('bc_players').select('*').eq('status', 'ready').order('player_number');
+  document.getElementById('ready-count').textContent = (ready || []).length;
+  document.getElementById('ready-players-list').innerHTML = (ready || []).map(p =>
+    `<div class="player-list-item">
+      ${getAvatarHtml(p, 36)}
+      <div><strong>#${p.player_number} ${p.first_name} ${p.last_name}</strong>${p.nickname ? `<br><span style="font-size:0.78rem;color:var(--text-muted);">"${p.nickname}"</span>` : ''}</div>
+    </div>`
+  ).join('') || '<p class="text-muted">No players ready yet.</p>';
+}
+
+async function setReady(ready) {
+  await db.from('bc_players').update({ status: ready ? 'ready' : 'joined' }).eq('id', currentPlayer.id);
+  loadLobby();
+}
+
+// ─── SCORING ─────────────────────────────────────────────
+async function loadScoringScreen() {
+  if (!currentPlayer) return;
+  const { data: me } = await db.from('bc_players').select('*').eq('id', currentPlayer.id).single();
+  const msg = document.getElementById('scoring-msg');
+  if (me.status !== 'playing' || !me.current_game_id) {
+    document.getElementById('score-grid').innerHTML = '<p class="text-muted">You are not in an active game.</p>';
+    document.getElementById('scorekeeper-section').style.display = 'none';
+    document.getElementById('host-confirm-section').style.display = 'none';
+    document.getElementById('frame-history-list').innerHTML = '';
+    document.getElementById('game-info-bar').textContent = '';
+    document.getElementById('pending-winner-banner').style.display = 'none';
+    return;
+  }
+  const { data: game } = await db.from('bc_games').select('*').eq('id', me.current_game_id).single();
+  if (!game) return;
+  currentGame = game;
+  const players = await getGamePlayers(game);
+  const frames = await getGameFrames(game.id);
+  const scores = computeScores(players, frames);
+  const maxScore = Math.max(...players.map(p => scores[p.id] || 0));
+  document.getElementById('game-info-bar').innerHTML = `Game #${game.id.slice(-4).toUpperCase()} | Court ${game.court_number || '?'} | ${game.status}`;
+  document.getElementById('score-grid').innerHTML = players.map(p => {
+    const sc = scores[p.id] || 0;
+    const isWinner = sc >= 10;
+    const isLeading = sc === maxScore && sc > 0;
+    return `<div class="score-card ${isWinner ? 'winner' : isLeading ? 'leading' : ''}">
+      <div class="player-num">#${p.player_number}</div>
+      <div class="player-name">${p.first_name} ${p.last_name}</div>
+      <div class="player-score">${sc}</div>
+    </div>`;
+  }).join('');
+  const pw = players.find(p => scores[p.id] >= 10);
+  const pwBanner = document.getElementById('pending-winner-banner');
+  if (pw && game.status === 'live') {
+    pwBanner.style.display = 'block';
+    pwBanner.textContent = `⚠️ ${pw.first_name} ${pw.last_name} has reached 10 points! Awaiting host confirmation.`;
+  } else { pwBanner.style.display = 'none'; }
+  const isScorekeeper = game.scorekeeper_id === currentPlayer.id;
+  const isHost = currentPlayer.is_host;
+  const skSection = document.getElementById('scorekeeper-section');
+  if ((isScorekeeper || isHost) && game.status === 'live' && !pw) {
+    skSection.style.display = 'block';
+    const sel = document.getElementById('frame-scorer');
+    sel.innerHTML = players.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+  } else { skSection.style.display = 'none'; }
+  document.getElementById('frame-history-list').innerHTML = frames.length === 0 ? '<p class="text-muted">No frames yet.</p>' :
+    frames.slice().reverse().map(f => {
+      const scorer = players.find(p => p.id === f.scorer_id);
+      return `<div class="frame-row">
+        <span class="frame-num">#${f.frame_number}</span>
+        <span class="frame-pts">${f.points_scored}pt</span>
+        <span style="flex:1">${scorer ? scorer.first_name : '?'}</span>
+        ${f.is_spock ? '<span class="spock-badge">⭐ Spock</span>' : ''}
+      </div>`;
+    }).join('');
+  const hostConfirm = document.getElementById('host-confirm-section');
+  if (isHost && pw && game.status === 'live') {
+    hostConfirm.style.display = 'block';
+    document.getElementById('confirm-winner-info').innerHTML = `<strong>${pw.first_name} ${pw.last_name}</strong> is the pending winner with ${scores[pw.id]} points in ${frames.length} frames.`;
+  } else { hostConfirm.style.display = 'none'; }
+  // Scorekeeper switch
+  if (isHost && game.status === 'live') {
+    const switchHtml = `<div class="mt-8"><label>Switch Scorekeeper</label><select id="sk-switch" style="margin-bottom:6px;">${players.map(p => `<option value="${p.id}" ${p.id === game.scorekeeper_id ? 'selected' : ''}>${p.first_name} ${p.last_name}</option>`).join('')}</select><button class="btn btn-gray btn-sm" onclick="switchScorekeeper()">Update</button></div>`;
+    skSection.insertAdjacentHTML('beforeend', switchHtml);
+  }
+}
+
+async function getGamePlayers(game) {
+  const ids = [game.player1_id, game.player2_id, game.player3_id, game.player4_id].filter(Boolean);
+  const { data } = await db.from('bc_players').select('*').in('id', ids);
+  return data || [];
+}
+
+async function getGameFrames(gameId) {
+  const { data } = await db.from('bc_frames').select('*').eq('game_id', gameId).order('frame_number');
+  return data || [];
+}
+
+function computeScores(players, frames) {
+  const scores = {};
+  players.forEach(p => scores[p.id] = 0);
+  frames.forEach(f => { if (f.scorer_id in scores) scores[f.scorer_id] += f.points_scored; });
+  return scores;
+}
+
+function setFramePts(pts) {
+  selectedFramePts = pts;
+  document.getElementById('pts-1-btn').style.opacity = pts === 1 ? '1' : '0.5';
+  document.getElementById('pts-2-btn').style.opacity = pts === 2 ? '1' : '0.5';
+}
+
+async function submitFrame() {
+  if (!selectedFramePts) { alert('Please select 1 or 2 points.'); return; }
+  const scorerId = document.getElementById('frame-scorer').value;
+  const isSpock = document.getElementById('frame-spock').checked;
+  const frames = await getGameFrames(currentGame.id);
+  const nextNum = frames.length + 1;
+  const { error } = await db.from('bc_frames').insert({
+    game_id: currentGame.id, frame_number: nextNum, scorer_id: scorerId,
+    points_scored: selectedFramePts, is_spock: isSpock
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  document.getElementById('frame-spock').checked = false;
+  selectedFramePts = null;
+  document.getElementById('pts-1-btn').style.opacity = '1';
+  document.getElementById('pts-2-btn').style.opacity = '1';
+  // Check for winner
+  const newFrames = await getGameFrames(currentGame.id);
+  const { data: game } = await db.from('bc_games').select('*').eq('id', currentGame.id).single();
+  const players = await getGamePlayers(game);
+  const scores = computeScores(players, newFrames);
+  const winner = players.find(p => scores[p.id] >= 10);
+  if (winner) {
+    await db.from('bc_games').update({ pending_winner_id: winner.id }).eq('id', currentGame.id);
+  }
+  loadScoringScreen();
+}
+
+async function confirmWinner() {
+  const { data: game } = await db.from('bc_games').select('*').eq('id', currentGame.id).single();
+  const players = await getGamePlayers(game);
+  const frames = await getGameFrames(game.id);
+  const scores = computeScores(players, frames);
+  const winner = players.find(p => p.id === game.pending_winner_id);
+  if (!winner) { alert('No pending winner.'); return; }
+  await db.from('bc_games').update({ status: 'complete', confirmed_winner_id: winner.id }).eq('id', game.id);
+  for (const p of players) {
+    await db.from('bc_players').update({ status: 'joined', current_game_id: null }).eq('id', p.id);
+  }
+  await autoAnnounce(`🏆 Official result — Court ${game.court_number || '?'}: ${winner.first_name} ${winner.last_name} wins!`);
+  alert(`Game confirmed! ${winner.first_name} ${winner.last_name} wins!`);
+  currentGame = null;
+  loadScoringScreen();
+  loadLeaderboard();
+}
+
+async function switchScorekeeper() {
+  const newSk = document.getElementById('sk-switch').value;
+  await db.from('bc_games').update({ scorekeeper_id: newSk }).eq('id', currentGame.id);
+  loadScoringScreen();
+}
+
+// ─── HOST ────────────────────────────────────────────────
+async function loadHostData() {
+  if (!currentPlayer?.is_host) return;
+  const tournId = await getConfig('active_tournament_id');
+  let playersQuery = db.from('bc_players').select('*').order('player_number');
+  if (tournId) {
+    const { data: regs } = await db.from('bc_registrations').select('player_id').eq('tournament_id', tournId);
+    if (regs && regs.length > 0) {
+      const ids = regs.map(r => r.player_id);
+      playersQuery = db.from('bc_players').select('*').in('id', ids).order('player_number');
+    }
+  }
+  const { data: pending } = await db.from('bc_games').select('*').eq('status', 'live').not('pending_winner_id', 'is', null);
+  const { data: active } = await db.from('bc_games').select('*').eq('status', 'live').is('pending_winner_id', null);
+  const { data: players } = await playersQuery;
+  document.getElementById('host-pending-games').innerHTML = await renderHostGames(pending || [], true);
+  document.getElementById('host-active-games').innerHTML = await renderHostGames(active || [], false);
+  document.getElementById('host-players-list').innerHTML = (players || []).map(p =>
+    `<div class="player-list-item" id="player-row-${p.id}">
+      ${getAvatarHtml(p, 36)}
+      <div style="flex:1">
+        <strong>#${p.player_number} ${p.first_name} ${p.last_name}</strong>
+        ${p.nickname ? `<span style="font-size:0.78rem;color:var(--text-muted);"> "${p.nickname}"</span>` : ''}
+        <span class="badge badge-${p.status === 'ready' ? 'green' : p.status === 'playing' ? 'blue' : 'gray'}" style="margin-left:6px;">${p.status}</span>
+        ${p.is_host ? '<span class="badge badge-gold" style="margin-left:4px;">host</span>' : ''}
+      </div>
+      <button class="btn btn-gray btn-sm" onclick="editPlayer('${p.id}', '${p.first_name}', '${p.last_name}', ${p.player_number})">Edit</button>
+      <button class="btn btn-gray btn-sm" onclick="toggleHost('${p.id}', ${!p.is_host})">${p.is_host ? '−Host' : '+Host'}</button>
+    </div>`
+  ).join('');
+}
+
+async function renderHostGames(games, isPending) {
+  if (!games.length) return '<p class="text-muted">None.</p>';
+  let html = '';
+  for (const g of games) {
+    const players = await getGamePlayers(g);
+    const frames = await getGameFrames(g.id);
+    const scores = computeScores(players, frames);
+    html += `<div class="card ${isPending ? 'red' : ''}" id="host-game-card-${g.id}">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="font-weight:bold;">Court ${g.court_number || '?'}</span>
+        <button class="btn btn-gray btn-sm" onclick="editCourt('${g.id}', '${g.court_number || ''}')">Edit Court</button>
+        ${isPending ? '<span style="color:var(--red);">⚠️ Pending Confirmation</span>' : ''}
+      </div>
+      <div style="font-size:0.82rem; margin-bottom:8px;">${players.map(p => `${p.first_name}: <strong>${scores[p.id] || 0}</strong>`).join(' | ')}</div>
+      ${isPending ? `<button class="btn btn-green btn-sm" onclick="hostConfirmGame('${g.id}')">Confirm Winner</button>` : ''}
+      <button class="btn btn-red btn-sm" onclick="cancelGame('${g.id}')" style="margin-left:6px;">Cancel</button>
+    </div>`;
+  }
+  return html;
+}
+
+async function editCourt(gameId, currentCourt) {
+  const card = document.getElementById(`host-game-card-${gameId}`);
+  const courtDiv = card.querySelector('div');
+  courtDiv.innerHTML = `
+    <input type="number" id="court-edit-${gameId}" value="${currentCourt}" min="1" max="99" placeholder="Court #" style="width:80px; margin:0 6px 0 0; display:inline-block;">
+    <button class="btn btn-green btn-sm" onclick="saveCourt('${gameId}')">Save</button>
+    <button class="btn btn-gray btn-sm" onclick="loadHostData()" style="margin-left:4px;">Cancel</button>
+  `;
+}
+
+async function saveCourt(gameId) {
+  const val = document.getElementById(`court-edit-${gameId}`).value;
+  if (!val) { alert('Enter a court number.'); return; }
+  await db.from('bc_games').update({ court_number: parseInt(val) }).eq('id', gameId);
+  loadHostData();
+}
+
+async function hostConfirmGame(gameId) {
+  currentGame = { id: gameId };
+  const { data: game } = await db.from('bc_games').select('*').eq('id', gameId).single();
+  currentGame = game;
+  await confirmWinner();
+  loadHostData();
+}
+
+async function cancelGame(gameId) {
+  if (!confirm('Cancel this game?')) return;
+  const { data: game } = await db.from('bc_games').select('*').eq('id', gameId).single();
+  await db.from('bc_games').update({ status: 'cancelled' }).eq('id', gameId);
+  const ids = [game.player1_id, game.player2_id, game.player3_id, game.player4_id].filter(Boolean);
+  for (const id of ids) await db.from('bc_players').update({ status: 'joined', current_game_id: null }).eq('id', id);
+  loadHostData();
+}
+
+async function toggleHost(playerId, makeHost) {
+  await db.from('bc_players').update({ is_host: makeHost }).eq('id', playerId);
+  loadHostData();
+}
+
+async function editPlayer(id, first, last, num) {
+  const row = document.getElementById(`player-row-${id}`);
+  row.innerHTML = `
+    <div style="width:100%;">
+      <div class="two-col" style="margin-bottom:6px;">
+        <input id="edit-first-${id}" value="${first}" placeholder="First name" style="margin:0;">
+        <input id="edit-last-${id}" value="${last}" placeholder="Last name" style="margin:0;">
+      </div>
+      <input id="edit-num-${id}" type="number" value="${num}" min="1" max="999" placeholder="Player # (1-999)" style="margin-bottom:6px;">
+      <div class="flex gap-8">
+        <button class="btn btn-green btn-sm" onclick="savePlayerEdit('${id}')">Save</button>
+        <button class="btn btn-gray btn-sm" onclick="loadHostData()">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function savePlayerEdit(id) {
+  const first = document.getElementById(`edit-first-${id}`).value.trim();
+  const last = document.getElementById(`edit-last-${id}`).value.trim();
+  const num = parseInt(document.getElementById(`edit-num-${id}`).value);
+  if (!first || !last) { alert('Name cannot be blank.'); return; }
+  if (isNaN(num) || num < 1 || num > 999) { alert('Number must be 1–999.'); return; }
+  const taken = allPlayers.find(p => p.player_number === num && p.id !== id);
+  if (taken) { alert(`#${num} is already taken by ${taken.first_name} ${taken.last_name}.`); return; }
+  await db.from('bc_players').update({ first_name: first, last_name: last, player_number: num }).eq('id', id);
+  await loadAllPlayers();
+  loadHostData();
+}
+
+function showMatchmaking() {
+  document.getElementById('matchmaking-panel').style.display = 'block';
+  document.getElementById('announcement-panel').style.display = 'none';
+  renderMatchmakingPlayers();
+}
+
+async function renderMatchmakingPlayers() {
+  const tournId = await getConfig('active_tournament_id');
+  let readyQuery = db.from('bc_players').select('*').eq('status', 'ready').order('player_number');
+  if (tournId) {
+    const { data: regs } = await db.from('bc_registrations').select('player_id').eq('tournament_id', tournId);
+    if (regs && regs.length > 0) {
+      const ids = regs.map(r => r.player_id);
+      readyQuery = db.from('bc_players').select('*').eq('status', 'ready').in('id', ids).order('player_number');
+    }
+  }
+  const { data: ready } = await readyQuery;
+  const container = document.getElementById('mm-player-checkboxes');
+  if (!ready || ready.length === 0) {
+    container.innerHTML = '<p class="text-muted">No ready players.</p>'; return;
+  }
+  container.innerHTML = ready.map(p =>
+    `<label style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #eee; cursor:pointer;">
+      <input type="checkbox" class="mm-player-cb" value="${p.id}" style="width:auto; margin:0;">
+      <span>#${p.player_number} ${p.first_name} ${p.last_name}</span>
+    </label>`
+  ).join('');
+  container.addEventListener('change', checkMMSelection);
+  // Suggest groups
+  if (ready.length >= 8) {
+    const suggestion = suggestGroup(ready);
+    document.getElementById('mm-suggestion').style.display = 'block';
+    document.getElementById('mm-suggestion').textContent = `Suggested group: ${suggestion.map(p => p.first_name).join(', ')}`;
+  }
+}
+
+function suggestGroup(readyPlayers) {
+  // Simple: pick first 4 with least recent pairings (basic shuffle for now)
+  const shuffled = [...readyPlayers].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 4);
+}
+
+function checkMMSelection() {
+  const checked = document.querySelectorAll('.mm-player-cb:checked');
+  const warn = document.getElementById('mm-warning');
+  if (checked.length > 4) { warn.style.display = 'block'; warn.textContent = 'Select exactly 4 players.'; }
+  else { warn.style.display = 'none'; }
+}
+
+async function createGame() {
+  if (await blockNewGames()) { alert('New games are blocked — tournament is in final phase.'); return; }
+  const checked = [...document.querySelectorAll('.mm-player-cb:checked')];
+  if (checked.length !== 4) { alert('Select exactly 4 players.'); return; }
+  const court = document.getElementById('mm-court').value;
+  const pids = checked.map(c => c.value);
+  const tournId = await getConfig('active_tournament_id');
+  const { data: game, error } = await db.from('bc_games').insert({
+    player1_id: pids[0], player2_id: pids[1], player3_id: pids[2], player4_id: pids[3],
+    scorekeeper_id: pids[0], court_number: court || null, status: 'live',
+    tournament_id: tournId || null
+  }).select().single();
+  if (error) { alert('Error: ' + error.message); return; }
+  for (const pid of pids) {
+    await db.from('bc_players').update({ status: 'playing', current_game_id: game.id }).eq('id', pid);
+  }
+  document.getElementById('matchmaking-panel').style.display = 'none';
+  const playerNames = checked.map(c => c.closest('label').textContent.trim().split(' ').slice(1).join(' ')).join(', ');
+  await autoAnnounce(`🎯 New game started on Court ${court || 'TBD'} — ${playerNames}`);
+  loadHostData();
+}
+
+function showAnnouncement() {
+  document.getElementById('announcement-panel').style.display = 'block';
+  document.getElementById('matchmaking-panel').style.display = 'none';
+}
+
+async function postAnnouncement() {
+  const text = document.getElementById('announcement-text').value.trim();
+  if (!text) { alert('Enter announcement text.'); return; }
+  await db.from('bc_announcements').insert({ message: text, posted_by: currentPlayer.id });
+  await refreshTickerMessages();
+  document.getElementById('announcement-text').value = '';
+  document.getElementById('announcement-panel').style.display = 'none';
+}
+
+async function manageCode() {
+  const { data } = await db.from('bc_config').select('value').eq('key', 'join_code').single();
+  const current = data?.value || 'Not set';
+  const newCode = prompt(`Current join code: ${current}\n\nEnter new join code (or cancel to keep current):`);
+  if (newCode) {
+    const upper = newCode.trim().toUpperCase();
+    await db.from('bc_config').upsert({ key: 'join_code', value: upper });
+    alert(`Join code set to: ${upper}`);
+  }
+}
+
+async function showTournamentSetup() {
+  document.getElementById('tournament-setup-panel').style.display = 'block';
+  document.getElementById('awards-panel').style.display = 'none';
+  const raw = await getConfig('tournament_info');
+  if (raw) {
+    try {
+      const info = JSON.parse(raw);
+      document.getElementById('tourn-name').value = info.name || '';
+      document.getElementById('tourn-date').value = info.date || '';
+      document.getElementById('tourn-location').value = info.location || '';
+    } catch(e) {}
+  }
+}
+
+async function saveTournamentInfo() {
+  const name = document.getElementById('tourn-name').value.trim();
+  const date = document.getElementById('tourn-date').value;
+  const location = document.getElementById('tourn-location').value.trim();
+  if (!name) { alert('Please enter a tournament name.'); return; }
+  const info = JSON.stringify({ name, date, location });
+  await db.from('bc_config').upsert({ key: 'tournament_info', value: info });
+  document.getElementById('tournament-setup-panel').style.display = 'none';
+  alert('Tournament info saved!');
+  loadLeaderboard();
+}
+
+const PRESET_AWARDS = ['Stylish Performer'];
+
+async function showAwardsPanel() {
+  document.getElementById('awards-panel').style.display = 'block';
+  document.getElementById('tournament-setup-panel').style.display = 'none';
+  const raw = await getConfig('discretionary_awards');
+  const awards = raw ? JSON.parse(raw) : [];
+  const listEl = document.getElementById('awards-list-host');
+  const allAwardNames = [...new Set([...PRESET_AWARDS, ...awards.map(a => a.award)])];
+  listEl.innerHTML = allAwardNames.map(awardName => {
+    const assigned = awards.find(a => a.award === awardName);
+    return `<div style="padding:8px 0; border-bottom:1px solid #eee;">
+      <div style="font-weight:bold; font-size:0.85rem; margin-bottom:4px;">🌟 ${awardName}</div>
+      ${assigned ? `<div style="font-size:0.82rem; color:var(--green-dark);">→ ${assigned.player_name}</div>
+        <button class="btn btn-gray btn-sm mt-8" onclick="removeAward('${awardName}')">Remove</button>` :
+        `<div class="autocomplete-wrapper">
+          <input type="text" placeholder="Assign player..." oninput="searchPlayers(this.value, 'award-list-${awardName.replace(/\s/g,'-')}')" id="award-input-${awardName.replace(/\s/g,'-')}" style="margin-bottom:4px;">
+          <div class="autocomplete-list" id="award-list-${awardName.replace(/\s/g,'-')}"></div>
+        </div>
+        <input type="hidden" id="award-pid-${awardName.replace(/\s/g,'-')}">
+        <button class="btn btn-gold btn-sm" onclick="assignPresetAward('${awardName}')">Assign</button>`}
+    </div>`;
+  }).join('');
+  // Wire up autocomplete selects for each preset
+  allAwardNames.forEach(awardName => {
+    const key = awardName.replace(/\s/g,'-');
+    const listDiv = document.getElementById(`award-list-${key}`);
+    if (listDiv) {
+      listDiv.addEventListener('click', e => {
+        const item = e.target.closest('.autocomplete-item');
+        if (!item) return;
+        document.getElementById(`award-input-${key}`).value = item.dataset.name;
+        document.getElementById(`award-pid-${key}`).value = item.dataset.id;
+        listDiv.innerHTML = '';
+      });
+    }
+  });
+}
+
+async function assignPresetAward(awardName) {
+  const key = awardName.replace(/\s/g,'-');
+  const playerName = document.getElementById(`award-input-${key}`)?.value.trim();
+  const playerId = document.getElementById(`award-pid-${key}`)?.value;
+  if (!playerName) { alert('Please select a player.'); return; }
+  await saveAward(awardName, playerName, playerId);
+  showAwardsPanel();
+}
+
+async function saveCustomAward() {
+  const awardName = document.getElementById('custom-award-name').value.trim();
+  const playerName = document.getElementById('custom-award-player').value.trim();
+  const playerId = document.getElementById('custom-award-player-id').value;
+  if (!awardName) { alert('Enter an award name.'); return; }
+  if (!playerName) { alert('Select a player.'); return; }
+  await saveAward(awardName, playerName, playerId);
+  document.getElementById('custom-award-name').value = '';
+  document.getElementById('custom-award-player').value = '';
+  document.getElementById('custom-award-player-id').value = '';
+  showAwardsPanel();
+}
+
+async function saveAward(awardName, playerName, playerId) {
+  const raw = await getConfig('discretionary_awards');
+  let awards = raw ? JSON.parse(raw) : [];
+  awards = awards.filter(a => a.award !== awardName);
+  awards.push({ award: awardName, player_name: playerName, player_id: playerId });
+  await db.from('bc_config').upsert({ key: 'discretionary_awards', value: JSON.stringify(awards) });
+  await autoAnnounce(`🌟 ${awardName}: ${playerName}`);
+  loadLeaderboard();
+}
+
+async function removeAward(awardName) {
+  const raw = await getConfig('discretionary_awards');
+  let awards = raw ? JSON.parse(raw) : [];
+  awards = awards.filter(a => a.award !== awardName);
+  await db.from('bc_config').upsert({ key: 'discretionary_awards', value: JSON.stringify(awards) });
+  showAwardsPanel();
+  loadLeaderboard();
+}
+
+// ─── PROFILE ─────────────────────────────────────────────
+const PROFILE_FIELDS = [
+  'nickname','profession','dream-profession','hometown','dream-hometown',
+  'phrase','food','beverage','lucky-number','car','boat-balloon',
+  'signature-move','style','experience','tourn-experience',
+  'self-word','other-word','why'
+];
+
+async function loadProfile() {
+  if (!currentPlayer) return;
+  const { data: me } = await db.from('bc_players').select('*').eq('id', currentPlayer.id).single();
+  if (!me) return;
+  currentPlayer = me;
+  updateProfileAvatar(me);
+  const profile = me.profile || {};
+  PROFILE_FIELDS.forEach(f => {
+    const el = document.getElementById(`pq-${f}`);
+    if (el) el.value = profile[f] || '';
+  });
+  // Trophy case
+  const { data: awards } = await db.from('bc_past_awards').select('*').eq('player_id', me.id).order('tournament_date', { ascending: false });
+  const trophyCard = document.getElementById('trophy-case-card');
+  const trophyList = document.getElementById('trophy-case-list');
+  if (awards && awards.length > 0) {
+    trophyCard.style.display = 'block';
+    trophyList.innerHTML = awards.map(a =>
+      `<div style="padding:8px 0; border-bottom:1px solid #eee;">
+        <div style="font-weight:bold;">🏆 ${a.award_name}</div>
+        <div style="font-size:0.82rem; color:var(--text-muted);">${a.tournament_name}${a.tournament_date ? ' · ' + a.tournament_date : ''}</div>
+      </div>`
+    ).join('');
+  } else { trophyCard.style.display = 'none'; }
+}
+
+function updateProfileAvatar(player) {
+  const large = document.getElementById('profile-avatar-large');
+  if (!large) return;
+  if (player.photo_url) {
+    large.outerHTML = `<img id="profile-avatar-large" src="${player.photo_url}" style="width:100px;height:100px;border-radius:50%;object-fit:cover;margin:0 auto;display:block;">`;
+  } else {
+    large.textContent = `${player.first_name[0]}${player.last_name[0]}`;
+  }
+}
+
+function getAvatarHtml(player, size=36) {
+  if (player.photo_url) {
+    return `<img src="${player.photo_url}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;">`;
+  }
+  const initials = `${player.first_name[0]}${player.last_name[0]}`;
+  const colors = ['#2d6a4f','#1d6fa4','#8b5e3c','#a37800','#c1121f','#5c3d1e'];
+  const color = colors[(player.player_number||0) % colors.length];
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:${Math.round(size*0.35)}px;flex-shrink:0;">${initials}</div>`;
+}
+
+async function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('photo-upload-status');
+  status.textContent = 'Uploading...';
+  const resized = await resizeImage(file, 400);
+  const fileName = `${currentPlayer.id}-${Date.now()}.jpg`;
+  const { error } = await db.storage.from('player-photos').upload(fileName, resized, { contentType:'image/jpeg', upsert:true });
+  if (error) { status.textContent = '❌ Upload failed: ' + error.message; return; }
+  const { data: urlData } = db.storage.from('player-photos').getPublicUrl(fileName);
+  const photoUrl = urlData.publicUrl;
+  await db.from('bc_players').update({ photo_url: photoUrl }).eq('id', currentPlayer.id);
+  currentPlayer.photo_url = photoUrl;
+  updateProfileAvatar(currentPlayer);
+  status.textContent = '✅ Photo saved!';
+  setTimeout(() => { status.textContent = ''; }, 3000);
+}
+
+function resizeImage(file, maxSize) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > h) { if (w > maxSize) { h = h*maxSize/w; w = maxSize; } }
+      else { if (h > maxSize) { w = w*maxSize/h; h = maxSize; } }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(resolve, 'image/jpeg', 0.85);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+}
+
+async function saveProfile() {
+  const msg = document.getElementById('profile-msg');
+  const profile = {};
+  PROFILE_FIELDS.forEach(f => {
+    const el = document.getElementById(`pq-${f}`);
+    if (el) profile[f] = el.value.trim();
+  });
+  const nickname = profile['nickname'] || null;
+  const { error } = await db.from('bc_players').update({ profile, nickname }).eq('id', currentPlayer.id);
+  if (error) { showMsg(msg, 'Error saving: ' + error.message, 'danger'); return; }
+  currentPlayer.profile = profile;
+  currentPlayer.nickname = nickname;
+  showMsg(msg, '✅ Profile saved!', 'success');
+}
+
+// ─── LEADERBOARD ─────────────────────────────────────────
+async function getConfig(key) {
+  const { data, error } = await db.from('bc_config').select('value').eq('key', key).single();
+  if (error || !data) return null;
+  return data.value;
+}
+
+async function loadLeaderboard() {
+  // Tournament header
+  const headerCard = document.getElementById('tournament-header-card');
+  const headerContent = document.getElementById('tournament-header-content');
+  const tInfoRaw = await getConfig('tournament_info');
+  if (tInfoRaw) {
+    try {
+      const info = JSON.parse(tInfoRaw);
+      const dateStr = info.date ? new Date(info.date + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+      headerCard.style.display = 'block';
+      headerContent.innerHTML = `<div style="text-align:center;">
+        <div style="font-size:1.3rem; font-weight:bold; color:var(--green-dark);">${info.name || ''}</div>
+        ${dateStr ? `<div style="color:var(--text-muted); font-size:0.88rem;">${dateStr}</div>` : ''}
+        ${info.location ? `<div style="color:var(--text-muted); font-size:0.82rem;">📍 ${info.location}</div>` : ''}
+      </div>`;
+    } catch(e) { headerCard.style.display = 'none'; }
+  } else { headerCard.style.display = 'none'; }
+
+  const tournId = await getConfig('active_tournament_id');
+  let gamesQuery = db.from('bc_games').select('*').eq('status', 'complete');
+  if (tournId) gamesQuery = gamesQuery.eq('tournament_id', tournId);
+  const { data: games } = await gamesQuery;
+  const { data: frames } = await db.from('bc_frames').select('*');
+
+  // Only show registered players
+  let players = [];
+  if (tournId) {
+    const { data: regs } = await db.from('bc_registrations').select('player_id').eq('tournament_id', tournId);
+    if (regs && regs.length > 0) {
+      const ids = regs.map(r => r.player_id);
+      const { data: regPlayers } = await db.from('bc_players').select('*').in('id', ids).order('player_number');
+      players = regPlayers || [];
+    }
+  } else {
+    const { data: allPlayers } = await db.from('bc_players').select('*').order('player_number');
+    players = allPlayers || [];
+  }
+  if (!players.length) { document.getElementById('leaderboard-list').innerHTML = '<p class="text-muted">No registered players yet.</p>'; return; }
+  const stats = players.map(p => computePlayerStats(p, games || [], frames || []));
+  stats.sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return b.ptsPerFrame - a.ptsPerFrame;
+  });
+  const qualified = stats.filter(s => s.gamesPlayed >= 3);
+  document.getElementById('leaderboard-list').innerHTML = stats.map((s, i) =>
+    `<div class="lb-row ${s.gamesPlayed >= 3 ? 'qualified' : ''}">
+      <div class="lb-rank">${i + 1}</div>
+      ${getAvatarHtml(s.player, 32)}
+      <div style="flex:1">
+        <div class="lb-name">#${s.player.player_number} ${s.player.first_name} ${s.player.last_name}${s.player.nickname ? ` <span style="font-size:0.75rem;color:var(--text-muted);">"${s.player.nickname}"</span>` : ''}</div>
+        <div class="lb-stats">${s.gamesPlayed} games | ${s.wins} wins | ${s.ptsPerFrame} pts/frame | ${s.spocksPerFrame} spocks/frame</div>
+      </div>
+    </div>`
+  ).join('') || '<p class="text-muted">No completed games yet.</p>';
+
+  const awardsEl = document.getElementById('awards-list');
+  if (qualified.length === 0) { awardsEl.innerHTML = '<p class="text-muted">No qualified players yet.</p>'; }
+  else {
+    const gc = qualified[0];
+    const mostWins = [...qualified].sort((a, b) => b.wins - a.wins)[0];
+    const topRatio = [...qualified].sort((a, b) => b.ptsPerFrame - a.ptsPerFrame)[0];
+    const spockmaster = [...qualified].sort((a, b) => b.spocksPerFrame - a.spocksPerFrame)[0];
+    const formidable = qualified.slice(1, 4);
+    awardsEl.innerHTML = `
+      <div class="card gold"><strong>🏆 Grand Champion:</strong> ${gc.player.first_name} ${gc.player.last_name} (${gc.wins}W, ${gc.ptsPerFrame} p/f)</div>
+      <div class="card"><strong>🥇 Most Wins:</strong> ${mostWins.player.first_name} ${mostWins.player.last_name} (${mostWins.wins} wins)</div>
+      <div class="card"><strong>📈 Top Pts/Frame:</strong> ${topRatio.player.first_name} ${topRatio.player.last_name} (${topRatio.ptsPerFrame})</div>
+      <div class="card"><strong>⭐ Spockmaster:</strong> ${spockmaster.player.first_name} ${spockmaster.player.last_name} (${spockmaster.spocksPerFrame} spocks/f)</div>
+      ${formidable.length ? `<div class="card"><strong>💪 Formidable Opponents:</strong> ${formidable.map(f => f.player.first_name + ' ' + f.player.last_name).join(', ')}</div>` : ''}
+    `;
+  }
+
+  // Discretionary awards
+  const discCard = document.getElementById('discretionary-awards-card');
+  const discList = document.getElementById('discretionary-awards-list');
+  const dAwardsRaw = await getConfig('discretionary_awards');
+  if (dAwardsRaw) {
+    try {
+      const list = JSON.parse(dAwardsRaw);
+      if (list.length > 0) {
+        discCard.style.display = 'block';
+        discList.innerHTML = list.map(a =>
+          `<div class="card"><strong>🌟 ${a.award}:</strong> ${a.player_name}</div>`
+        ).join('');
+      } else { discCard.style.display = 'none'; }
+    } catch(e) { discCard.style.display = 'none'; }
+  } else { discCard.style.display = 'none'; }
+}
+
+function computePlayerStats(player, games, frames) {
+  const myGames = games.filter(g =>
+    [g.player1_id, g.player2_id, g.player3_id, g.player4_id].includes(player.id)
+  );
+  const gameStats = myGames.map(g => {
+    const gFrames = frames.filter(f => f.game_id === g.id);
+    const myFrames = gFrames.filter(f => f.scorer_id === player.id);
+    const pts = myFrames.reduce((s, f) => s + f.points_scored, 0);
+    const spocks = myFrames.filter(f => f.is_spock).length;
+    const totalFrames = gFrames.length;
+    const won = g.confirmed_winner_id === player.id;
+    return { won, pts, spocks, totalFrames, ptsPerFrame: totalFrames ? pts / totalFrames : 0, spocksPerFrame: totalFrames ? spocks / totalFrames : 0 };
+  });
+
+  // Discard worst game: keep wins, then discard worst loss by pts/frame impact
+  let best = gameStats;
+  if (gameStats.length > 3) {
+    const wins = gameStats.filter(g => g.won);
+    const losses = gameStats.filter(g => !g.won);
+    if (losses.length > 0) {
+      losses.sort((a, b) => a.ptsPerFrame - b.ptsPerFrame);
+      losses.shift();
+      best = [...wins, ...losses];
+    } else {
+      // All wins — discard the one whose removal most improves pts/frame
+      let bestSet = null, bestRatio = -1;
+      for (let i = 0; i < gameStats.length; i++) {
+        const subset = gameStats.filter((_, j) => j !== i);
+        const totalPts = subset.reduce((s, g) => s + g.pts, 0);
+        const totalFrames = subset.reduce((s, g) => s + g.totalFrames, 0);
+        const ratio = totalFrames ? totalPts / totalFrames : 0;
+        if (ratio > bestRatio) { bestRatio = ratio; bestSet = subset; }
+      }
+      best = bestSet || gameStats;
+    }
+    if (best.length > 3) best = best.slice(0, 3);
+  }
+
+  const wins = best.filter(g => g.won).length;
+  const totalPts = best.reduce((s, g) => s + g.pts, 0);
+  const totalFrames = best.reduce((s, g) => s + g.totalFrames, 0);
+  const totalSpocks = best.reduce((s, g) => s + g.spocks, 0);
+  return {
+    player, gamesPlayed: myGames.length,
+    wins, totalPts, totalFrames, totalSpocks,
+    ptsPerFrame: totalFrames ? parseFloat((totalPts / totalFrames).toFixed(3)) : 0,
+    spocksPerFrame: totalFrames ? parseFloat((totalSpocks / totalFrames).toFixed(3)) : 0
+  };
+}
+
+async function getPlayerStats(playerId) {
+  const tournId = await getConfig('active_tournament_id');
+  let gamesQuery = db.from('bc_games').select('*').eq('status', 'complete');
+  if (tournId) gamesQuery = gamesQuery.eq('tournament_id', tournId);
+  const { data: games } = await gamesQuery;
+  const { data: frames } = await db.from('bc_frames').select('*');
+  const { data: player } = await db.from('bc_players').select('*').eq('id', playerId).single();
+  const s = computePlayerStats(player, games || [], frames || []);
+  return { games: s.gamesPlayed, wins: s.wins, ptsPerFrame: s.ptsPerFrame, spocksPerFrame: s.spocksPerFrame };
+}
+
+// ─── TOURNAMENT MANAGEMENT ────────────────────────────────
+let activeTournamentId = null;
+
+async function getActiveTournament() {
+  const id = await getConfig('active_tournament_id');
+  if (!id) return null;
+  activeTournamentId = id;
+  const { data } = await db.from('bc_tournaments').select('*').eq('id', id).single();
+  return data;
+}
+
+async function loadJoinScreenTournamentName() {
+  const tourn = await getActiveTournament();
+  const el = document.getElementById('join-tournament-name');
+  if (el && tourn) {
+    const dateStr = tourn.date ? new Date(tourn.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+    el.textContent = `${tourn.name}${dateStr ? ' — ' + dateStr : ''}`;
+  }
+}
+
+async function reregisterPlayer() {
+  const playerId = document.getElementById('rejoin-selected-id').value;
+  const code = document.getElementById('rejoin-code').value.trim().toUpperCase();
+  const msg = document.getElementById('join-msg-return');
+  if (!playerId) { showMsg(msg, 'Please search and select your name first.', 'danger'); return; }
+  if (!code) { showMsg(msg, 'Please enter the join code.', 'danger'); return; }
+  const { data: cfg } = await db.from('bc_config').select('value').eq('key', 'join_code').single();
+  if (!cfg || cfg.value !== code) { showMsg(msg, 'Invalid join code.', 'danger'); return; }
+  const tournId = await getConfig('active_tournament_id');
+  if (!tournId) { showMsg(msg, 'No active tournament found.', 'danger'); return; }
+  await db.from('bc_registrations').upsert({ tournament_id: tournId, player_id: playerId }, { onConflict: 'tournament_id,player_id' });
+  await db.from('bc_players').update({ status: 'joined' }).eq('id', playerId);
+  const { data: player } = await db.from('bc_players').select('*').eq('id', playerId).single();
+  currentPlayer = player;
+  localStorage.setItem('bocce_player_id', player.id);
+  initApp();
+}
+
+async function isPlayerRegistered(playerId) {
+  const tournId = await getConfig('active_tournament_id');
+  if (!tournId) return false;
+  const { data } = await db.from('bc_registrations').select('id').eq('tournament_id', tournId).eq('player_id', playerId).single();
+  return !!data;
+}
+
+async function showNewTournamentPanel() {
+  document.getElementById('new-tournament-panel').style.display = 'block';
+  document.getElementById('past-awards-panel').style.display = 'none';
+}
+
+async function createNewTournament() {
+  const name = document.getElementById('new-tourn-name').value.trim();
+  const date = document.getElementById('new-tourn-date').value;
+  const location = document.getElementById('new-tourn-location').value.trim();
+  if (!name) { alert('Please enter a tournament name.'); return; }
+  if (!confirm(`Archive current tournament and start "${name}"? This cannot be undone.`)) return;
+
+  // 1. Archive current tournament awards before closing it
+  const tournId = await getConfig('active_tournament_id');
+  if (tournId) {
+    const { data: tourn } = await db.from('bc_tournaments').select('*').eq('id', tournId).single();
+    const { data: games } = await db.from('bc_games').select('*').eq('status', 'complete').eq('tournament_id', tournId);
+    const { data: frames } = await db.from('bc_frames').select('*');
+    const { data: players } = await db.from('bc_players').select('*');
+    if (games && players) {
+      const stats = players.map(p => computePlayerStats(p, games, frames || []));
+      stats.sort((a,b) => b.wins !== a.wins ? b.wins - a.wins : b.ptsPerFrame - a.ptsPerFrame);
+      const qualified = stats.filter(s => s.gamesPlayed >= 3);
+      const tournName = tourn?.name || 'Past Tournament';
+      const tournDate = tourn?.date || '';
+      const autoAwardMap = [
+        { idx: 0, name: 'Grand Champion' },
+        { idx: -1, name: 'Most Wins', sorter: (a,b) => b.wins - a.wins },
+        { idx: -1, name: 'Top Pts/Frame', sorter: (a,b) => b.ptsPerFrame - a.ptsPerFrame },
+        { idx: -1, name: 'Spockmaster', sorter: (a,b) => b.spocksPerFrame - a.spocksPerFrame },
+      ];
+      if (qualified.length > 0) {
+        const gc = qualified[0];
+        await db.from('bc_past_awards').insert({ player_id: gc.player.id, tournament_id: tournId, tournament_name: tournName, tournament_date: tournDate, award_name: 'Grand Champion' });
+        const mostWins = [...qualified].sort((a,b) => b.wins - a.wins)[0];
+        await db.from('bc_past_awards').insert({ player_id: mostWins.player.id, tournament_id: tournId, tournament_name: tournName, tournament_date: tournDate, award_name: 'Most Wins' });
+        const topRatio = [...qualified].sort((a,b) => b.ptsPerFrame - a.ptsPerFrame)[0];
+        await db.from('bc_past_awards').insert({ player_id: topRatio.player.id, tournament_id: tournId, tournament_name: tournName, tournament_date: tournDate, award_name: 'Top Pts/Frame' });
+        const spockmaster = [...qualified].sort((a,b) => b.spocksPerFrame - a.spocksPerFrame)[0];
+        await db.from('bc_past_awards').insert({ player_id: spockmaster.player.id, tournament_id: tournId, tournament_name: tournName, tournament_date: tournDate, award_name: 'Spockmaster' });
+        qualified.slice(1,4).forEach(async (f,i) => {
+          await db.from('bc_past_awards').insert({ player_id: f.player.id, tournament_id: tournId, tournament_name: tournName, tournament_date: tournDate, award_name: `Formidable Opponent #${i+1}` });
+        });
+      }
+      // Save discretionary awards too
+      const dRaw = await getConfig('discretionary_awards');
+      if (dRaw) {
+        const dAwards = JSON.parse(dRaw);
+        for (const a of dAwards) {
+          if (a.player_id) await db.from('bc_past_awards').insert({ player_id: a.player_id, tournament_id: tournId, tournament_name: tournName, tournament_date: tournDate, award_name: a.award });
+        }
+      }
+    }
+    // Mark old tournament complete
+    await db.from('bc_tournaments').update({ status: 'complete' }).eq('id', tournId);
+  }
+
+  // 2. Reset player statuses
+  await db.from('bc_players').update({ status: 'joined', current_game_id: null }).neq('id', '00000000-0000-0000-0000-000000000000');
+
+  // 3. Create new tournament
+  const { data: newTourn } = await db.from('bc_tournaments').insert({ name, date, location, status: 'active' }).select().single();
+
+  // 4. Update config
+  await db.from('bc_config').upsert({ key: 'active_tournament_id', value: newTourn.id });
+  await db.from('bc_config').upsert({ key: 'tournament_info', value: JSON.stringify({ name, date, location }) });
+  await db.from('bc_config').upsert({ key: 'tournament_phase', value: '' });
+  await db.from('bc_config').upsert({ key: 'discretionary_awards', value: '[]' });
+
+  // 5. Re-register host automatically
+  await db.from('bc_registrations').insert({ tournament_id: newTourn.id, player_id: currentPlayer.id });
+
+  activeTournamentId = newTourn.id;
+  document.getElementById('new-tournament-panel').style.display = 'none';
+  alert(`New tournament "${name}" started! Players must re-register to participate.`);
+  await autoAnnounce(`🆕 New tournament started: ${name}! All players must re-register.`);
+  loadHostData();
+  loadLeaderboard();
+}
+
+function showPastAwardsPanel() {
+  document.getElementById('past-awards-panel').style.display = 'block';
+  document.getElementById('new-tournament-panel').style.display = 'none';
+  loadPastAwardsList();
+}
+
+async function savePastAward() {
+  const playerId = document.getElementById('past-award-player-id').value;
+  const playerName = document.getElementById('past-award-player').value.trim();
+  const awardName = document.getElementById('past-award-name').value.trim();
+  const tournName = document.getElementById('past-award-tourn-name').value.trim();
+  const year = document.getElementById('past-award-year').value.trim();
+  if (!playerId || !awardName || !tournName) { alert('Please fill in player, award name, and tournament name.'); return; }
+  await db.from('bc_past_awards').insert({ player_id: playerId, tournament_name: tournName, tournament_date: year, award_name: awardName });
+  document.getElementById('past-award-name').value = '';
+  document.getElementById('past-award-tourn-name').value = '';
+  document.getElementById('past-award-year').value = '';
+  document.getElementById('past-award-player').value = '';
+  document.getElementById('past-award-player-id').value = '';
+  loadPastAwardsList();
+}
+
+async function loadPastAwardsList() {
+  const { data } = await db.from('bc_past_awards').select('*, bc_players(first_name, last_name, player_number)').order('created_at', { ascending: false }).limit(30);
+  const el = document.getElementById('past-awards-list-host');
+  if (!data || !data.length) { el.innerHTML = '<p class="text-muted">No past awards recorded.</p>'; return; }
+  el.innerHTML = data.map(a =>
+    `<div style="padding:6px 0; border-bottom:1px solid #eee; font-size:0.82rem;">
+      <strong>${a.award_name}</strong> — ${a.bc_players?.first_name} ${a.bc_players?.last_name}
+      <span style="color:var(--text-muted);"> | ${a.tournament_name} ${a.tournament_date ? '('+a.tournament_date+')' : ''}</span>
+    </div>`
+  ).join('');
+}
+
+
+let displaySlides = [];
+let displayIndex = 0;
+let displayTimer = null;
+let displayDuration = 6000;
+let displayProgressTimer = null;
+let displayInterruptQueue = [];
+let displayInterruptActive = false;
+let lastFrameId = null;
+
+async function saveDisplaySettings() {
+  const dur = document.getElementById('display-duration').value;
+  await db.from('bc_config').upsert({ key: 'display_duration', value: String(dur) });
+  displayDuration = parseInt(dur) * 1000;
+  alert('Display settings saved!');
+}
+
+async function uploadTournamentPhotos(event, type) {
+  const files = Array.from(event.target.files);
+  const status = document.getElementById('photo-upload-progress');
+  let uploaded = 0;
+  for (const file of files) {
+    status.textContent = `Uploading ${uploaded + 1} of ${files.length}...`;
+    const caption = prompt(`Caption for ${file.name}? (optional — press OK to skip)`);
+    const resized = await resizeImage(file, 1200);
+    const fileName = `${type}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+    const { error } = await db.storage.from('player-photos').upload(fileName, resized, { contentType: 'image/jpeg', upsert: true });
+    if (!error) {
+      const { data: urlData } = db.storage.from('player-photos').getPublicUrl(fileName);
+      const photos = JSON.parse(await getConfig('tournament_photos') || '[]');
+      photos.push({ url: urlData.publicUrl, caption: caption || '', type, fileName });
+      await db.from('bc_config').upsert({ key: 'tournament_photos', value: JSON.stringify(photos) });
+    }
+    uploaded++;
+  }
+  status.textContent = `✅ ${uploaded} photo(s) uploaded!`;
+  setTimeout(() => { status.textContent = ''; }, 3000);
+  loadDisplayPhotos();
+}
+
+async function loadDisplayPhotos() {
+  const raw = await getConfig('tournament_photos');
+  const photos = raw ? JSON.parse(raw) : [];
+  const el = document.getElementById('display-photo-list');
+  if (!photos.length) { el.innerHTML = '<p class="text-muted">No photos uploaded yet.</p>'; return; }
+  el.innerHTML = photos.map((p, i) =>
+    `<div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #eee;">
+      <img src="${p.url}" style="width:60px; height:40px; object-fit:cover; border-radius:6px;">
+      <div style="flex:1; font-size:0.82rem;">
+        <span class="badge badge-${p.type === 'past' ? 'gray' : 'green'}">${p.type}</span>
+        ${p.caption ? `<span style="margin-left:6px;">${p.caption}</span>` : '<span style="opacity:0.5;">No caption</span>'}
+      </div>
+      <button class="btn btn-red btn-sm" onclick="deletePhoto(${i})">✕</button>
+    </div>`
+  ).join('');
+}
+
+async function deletePhoto(index) {
+  const raw = await getConfig('tournament_photos');
+  const photos = raw ? JSON.parse(raw) : [];
+  photos.splice(index, 1);
+  await db.from('bc_config').upsert({ key: 'tournament_photos', value: JSON.stringify(photos) });
+  loadDisplayPhotos();
+}
+
+async function launchDisplay() {
+  const dur = await getConfig('display_duration');
+  if (dur) displayDuration = parseInt(dur) * 1000;
+  document.getElementById('display-fullscreen').style.display = 'block';
+  document.getElementById('nav').style.display = 'none';
+  document.getElementById('ticker-bar').style.display = 'none';
+  setInterval(() => {
+    document.getElementById('display-clock').textContent = new Date().toLocaleTimeString();
+  }, 1000);
+  await buildSlides();
+  displayIndex = 0;
+  showDisplaySlide();
+  subscribeDisplayInterrupts();
+}
+
+function exitDisplay() {
+  document.getElementById('display-fullscreen').style.display = 'none';
+  document.getElementById('nav').style.display = 'flex';
+  document.getElementById('ticker-bar').style.display = 'flex';
+  clearTimeout(displayTimer);
+  clearInterval(displayProgressTimer);
+}
+
+async function buildSlides() {
+  displaySlides = [];
+  const phase = await getConfig('tournament_phase');
+  const blackout = ['last_scores','tournament_over','ceremony','awards_revealed'].includes(phase);
+  const awardsRevealed = phase === 'awards_revealed';
+
+  const { data: games } = await db.from('bc_games').select('*').eq('status', 'live');
+  const { data: allGames } = await db.from('bc_games').select('*').eq('status', 'complete');
+  const { data: allFrames } = await db.from('bc_frames').select('*');
+  const { data: players } = await db.from('bc_players').select('*').order('player_number');
+  const { data: announcements } = await db.from('bc_announcements').select('*').order('created_at', { ascending: false }).limit(3);
+  const photosRaw = await getConfig('tournament_photos');
+  const photos = photosRaw ? JSON.parse(photosRaw) : [];
+  const tInfoRaw = await getConfig('tournament_info');
+  const tInfo = tInfoRaw ? JSON.parse(tInfoRaw) : {};
+
+  // Phase countdown slide — always first if active
+  if (phase === 'last_game') {
+    const endsAt = await getConfig('phase_last_game_ends');
+    if (endsAt) displaySlides.push({ type: 'phase-countdown', label: '⏳ Last Game', sublabel: 'Time remaining to start new games', endsAt, color: '#a37800' });
+  }
+  if (phase === 'last_scores') {
+    const endsAt = await getConfig('phase_last_scores_ends');
+    if (endsAt) displaySlides.push({ type: 'phase-countdown', label: '🚨 Last Score Submission', sublabel: 'Finish all games before time runs out', endsAt, color: '#c1121f' });
+  }
+  if (phase === 'tournament_over') {
+    displaySlides.push({ type: 'phase-static', label: '🏁 Tournament Over', sublabel: 'Awards Ceremony Coming Soon', color: '#1b4332' });
+  }
+  if (phase === 'ceremony') {
+    const endsAt = await getConfig('phase_ceremony_ends');
+    if (endsAt) displaySlides.push({ type: 'phase-countdown', label: '🎉 Awards Ceremony', sublabel: 'Starting soon!', endsAt, color: '#a37800' });
+  }
+
+  // Live games — only if not in blackout
+  if (!blackout && games && games.length > 0) {
+    const g = games[Math.floor(Math.random() * games.length)];
+    const ps = await getGamePlayers(g);
+    const gf = (allFrames || []).filter(f => f.game_id === g.id);
+    const scores = computeScores(ps, gf);
+    displaySlides.push({ type: 'live-game', game: g, players: ps, scores, frames: gf.length });
+  }
+
+  // Standings — only if not in blackout
+  if (!blackout && players && allGames) {
+    const stats = players.map(p => computePlayerStats(p, allGames, allFrames || []));
+    stats.sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.ptsPerFrame - a.ptsPerFrame);
+    displaySlides.push({ type: 'standings', stats: stats.slice(0, 8), tInfo });
+  }
+
+  // Awards — only after reveal
+  if (awardsRevealed && players && allGames) {
+    const stats = players.map(p => computePlayerStats(p, allGames, allFrames || []));
+    stats.sort((a,b) => b.wins !== a.wins ? b.wins - a.wins : b.ptsPerFrame - a.ptsPerFrame);
+    const qualified = stats.filter(s => s.gamesPlayed >= 3);
+    const dRaw = await getConfig('discretionary_awards');
+    const dAwards = dRaw ? JSON.parse(dRaw) : [];
+    displaySlides.push({ type: 'awards-reveal', qualified, dAwards, players });
+  }
+
+  // Recent winner — only if not in blackout
+  if (!blackout && allGames && allGames.length > 0) {
+    const recent = [...allGames].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    if (recent?.confirmed_winner_id && players) {
+      const winner = players.find(p => p.id === recent.confirmed_winner_id);
+      if (winner) displaySlides.push({ type: 'winner', winner, game: recent });
+    }
+  }
+
+  // Player profiles
+  if (players) {
+    const withProfiles = players.filter(p => p.profile && Object.values(p.profile).some(v => v));
+    for (const p of withProfiles) displaySlides.push({ type: 'profile', player: p });
+  }
+
+  // Announcements
+  if (announcements && announcements.length > 0) {
+    displaySlides.push({ type: 'announcements', items: announcements });
+  }
+
+  // Past photos
+  const pastPhotos = photos.filter(p => p.type === 'past');
+  for (const ph of pastPhotos) displaySlides.push({ type: 'photo', photo: ph, label: 'Past Tournament' });
+
+  // Present photos
+  const presentPhotos = photos.filter(p => p.type === 'present');
+  for (const ph of presentPhotos) displaySlides.push({ type: 'photo', photo: ph, label: 'Today' });
+
+  if (!displaySlides.length) displaySlides.push({ type: 'empty' });
+}
+
+function showDisplaySlide() {
+  clearTimeout(displayTimer);
+  clearInterval(displayProgressTimer);
+  if (!displaySlides.length) {
+    document.getElementById('display-slide').innerHTML = renderDisplaySlide({ type: 'empty' });
+    return;
+  }
+  if (displayIndex >= displaySlides.length) displayIndex = 0;
+  const slide = displaySlides[displayIndex];
+  document.getElementById('display-slide').innerHTML = renderDisplaySlide(slide);
+  // Progress bar
+  const fill = document.getElementById('display-progress-fill');
+  fill.style.transition = 'none';
+  fill.style.width = '0%';
+  setTimeout(() => {
+    fill.style.transition = `width ${displayDuration}ms linear`;
+    fill.style.width = '100%';
+  }, 50);
+  displayTimer = setTimeout(async () => {
+    displayIndex++;
+    if (displayIndex >= displaySlides.length) {
+      await buildSlides(); // Refresh data each full cycle
+      displayIndex = 0;
+    }
+    showDisplaySlide();
+  }, displayDuration);
+}
+
+function renderDisplaySlide(slide) {
+  const base = `position:relative; width:100%; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 40px 60px; text-align:center; overflow:hidden;`;
+  if (slide.type === 'empty') return `<div style="${base}"><div style="font-size:2rem; color:var(--gold-light);">🎯 Tournament Loading...</div></div>`;
+
+  if (slide.type === 'phase-countdown') {
+    const remaining = parseInt(slide.endsAt) - Date.now();
+    const mins = Math.max(0, Math.floor(remaining / 60000));
+    const secs = Math.max(0, Math.floor((remaining % 60000) / 1000));
+    const timeStr = remaining <= 0 ? "TIME'S UP" : `${mins}:${secs.toString().padStart(2,'0')}`;
+    return `<div style="${base} background:linear-gradient(135deg, ${slide.color} 0%, #111 100%);">
+      <div style="font-size:1rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:20px;">${slide.label}</div>
+      <div style="font-size:5rem; font-weight:bold; color:white; font-variant-numeric:tabular-nums; line-height:1;">${timeStr}</div>
+      <div style="font-size:1rem; opacity:0.7; margin-top:16px;">${slide.sublabel}</div>
+    </div>`;
+  }
+
+  if (slide.type === 'phase-static') {
+    return `<div style="${base} background:linear-gradient(135deg, ${slide.color} 0%, #111 100%);">
+      <div style="font-size:3rem; margin-bottom:16px;">${slide.label}</div>
+      <div style="font-size:1.2rem; opacity:0.8;">${slide.sublabel}</div>
+    </div>`;
+  }
+
+  if (slide.type === 'awards-reveal') {
+    const { qualified, dAwards } = slide;
+    const gc = qualified[0];
+    const mostWins = qualified.length ? [...qualified].sort((a,b) => b.wins - a.wins)[0] : null;
+    const topRatio = qualified.length ? [...qualified].sort((a,b) => b.ptsPerFrame - a.ptsPerFrame)[0] : null;
+    const spockmaster = qualified.length ? [...qualified].sort((a,b) => b.spocksPerFrame - a.spocksPerFrame)[0] : null;
+    const formidable = qualified.slice(1,4);
+    const allAwards = [
+      gc ? { name: '🏆 Grand Champion', player: gc.player } : null,
+      mostWins ? { name: '🥇 Most Wins', player: mostWins.player } : null,
+      topRatio ? { name: '📈 Top Pts/Frame', player: topRatio.player } : null,
+      spockmaster ? { name: '⭐ Spockmaster', player: spockmaster.player } : null,
+      ...formidable.map((f,i) => ({ name: `💪 Formidable #${i+1}`, player: f.player })),
+      ...dAwards.map(a => ({ name: `🌟 ${a.award}`, playerName: a.player_name }))
+    ].filter(Boolean);
+    return `<div style="${base} background:linear-gradient(135deg, #a37800 0%, #1b4332 100%); overflow-y:auto;">
+      <div style="font-size:0.9rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:20px;">🏆 Award Winners</div>
+      <div style="width:100%; max-width:600px;">
+        ${allAwards.map(a => `<div style="display:flex; align-items:center; gap:14px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.15);">
+          <div style="flex:1; text-align:left;">
+            <div style="font-size:0.82rem; color:var(--gold-light);">${a.name}</div>
+            <div style="font-size:1.1rem; font-weight:bold;">${a.player ? `${a.player.first_name} ${a.player.last_name}` : a.playerName}</div>
+          </div>
+          ${a.player?.photo_url ? `<img src="${a.player.photo_url}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;">` : ''}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (slide.type === 'live-game') {
+    const { game, players, scores } = slide;
+    const maxScore = Math.max(...players.map(p => scores[p.id] || 0));
+    return `<div style="${base} background:linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);">
+      <div style="font-size:0.9rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:16px;">🎯 Live — Court ${game.court_number || '?'}</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; width:100%; max-width:700px;">
+        ${players.map(p => {
+          const sc = scores[p.id] || 0;
+          const leading = sc === maxScore && sc > 0;
+          return `<div style="background:rgba(255,255,255,${leading ? '0.18' : '0.07'}); border-radius:16px; padding:24px; border:2px solid ${leading ? 'var(--gold)' : 'transparent'};">
+            ${p.photo_url ? `<img src="${p.photo_url}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;margin-bottom:10px;">` : `<div style="width:70px;height:70px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:bold;margin:0 auto 10px;">${p.first_name[0]}${p.last_name[0]}</div>`}
+            <div style="font-size:0.85rem; opacity:0.8;">#${p.player_number}</div>
+            <div style="font-size:1.1rem; font-weight:bold;">${p.first_name} ${p.last_name}</div>
+            ${p.nickname ? `<div style="font-size:0.8rem; opacity:0.7;">"${p.nickname}"</div>` : ''}
+            <div style="font-size:3.5rem; font-weight:bold; color:${leading ? 'var(--gold-light)' : 'white'}; line-height:1;">${sc}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${game.pending_winner_id ? `<div style="margin-top:20px; background:var(--gold); color:var(--brown); padding:10px 24px; border-radius:30px; font-weight:bold;">⏳ Awaiting Official Confirmation</div>` : ''}
+    </div>`;
+  }
+
+  if (slide.type === 'standings') {
+    const { stats, tInfo } = slide;
+    return `<div style="${base} background:linear-gradient(135deg, #1b4332 0%, #1d6fa4 100%);">
+      <div style="font-size:0.85rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:6px;">📊 Current Standings</div>
+      ${tInfo.name ? `<div style="font-size:1rem; opacity:0.7; margin-bottom:16px;">${tInfo.name}</div>` : ''}
+      <div style="width:100%; max-width:600px;">
+        ${stats.map((s, i) => `
+          <div style="display:flex; align-items:center; gap:14px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
+            <div style="font-size:1.4rem; font-weight:bold; color:var(--gold-light); min-width:36px;">${i + 1}</div>
+            ${s.player.photo_url ? `<img src="${s.player.photo_url}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : `<div style="width:40px;height:40px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;">${s.player.first_name[0]}${s.player.last_name[0]}</div>`}
+            <div style="flex:1; text-align:left;">
+              <div style="font-weight:bold;">${s.gamesPlayed >= 3 ? '★ ' : ''}${s.player.first_name} ${s.player.last_name}</div>
+              <div style="font-size:0.75rem; opacity:0.7;">${s.wins}W | ${s.ptsPerFrame} pts/f</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (slide.type === 'winner') {
+    const { winner } = slide;
+    return `<div style="${base} background:linear-gradient(135deg, #a37800 0%, #d4a017 100%);">
+      <div style="font-size:0.9rem; color:white; text-transform:uppercase; letter-spacing:3px; margin-bottom:20px;">🏆 Official Game Winner</div>
+      ${winner.photo_url ? `<img src="${winner.photo_url}" style="width:160px;height:160px;border-radius:50%;object-fit:cover;margin-bottom:20px;border:4px solid white;">` : `<div style="width:160px;height:160px;border-radius:50%;background:var(--green-dark);color:white;display:flex;align-items:center;justify-content:center;font-size:3rem;font-weight:bold;margin:0 auto 20px;">${winner.first_name[0]}${winner.last_name[0]}</div>`}
+      <div style="font-size:2.5rem; font-weight:bold; color:white;">${winner.first_name} ${winner.last_name}</div>
+      ${winner.nickname ? `<div style="font-size:1.2rem; opacity:0.85; margin-top:6px;">"${winner.nickname}"</div>` : ''}
+      <div style="font-size:1rem; opacity:0.8; margin-top:10px;">#${winner.player_number}</div>
+    </div>`;
+  }
+
+  if (slide.type === 'profile') {
+    const { player } = slide;
+    const p = player.profile || {};
+    const qPairs = [
+      { q: 'Profession', v: p['profession'] },
+      { q: 'Hometown', v: p['hometown'] },
+      { q: 'Signature Move', v: p['signature-move'] },
+      { q: 'Playing Style', v: p['style'] },
+      { q: 'Bocce Experience', v: p['experience'] },
+      { q: 'Best describes me', v: p['phrase'] },
+      { q: 'Favorite Food', v: p['food'] },
+      { q: 'Favorite Beverage', v: p['beverage'] },
+      { q: 'In Bocce terms, I am', v: p['self-word'] },
+      { q: 'Others would say', v: p['other-word'] },
+      { q: 'Favorite Car', v: p['car'] },
+      { q: 'Dream Profession', v: p['dream-profession'] },
+    ].filter(x => x.v);
+    // Pick 5 random answers
+    const shuffled = qPairs.sort(() => Math.random() - 0.5).slice(0, 5);
+    return `<div style="${base} background:linear-gradient(135deg, #1b4332 0%, #5c3d1e 100%);">
+      <div style="font-size:0.85rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:16px;">👤 Player Profile</div>
+      ${player.photo_url ? `<img src="${player.photo_url}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;margin-bottom:14px;border:3px solid var(--gold);">` : `<div style="width:120px;height:120px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:bold;margin:0 auto 14px;">${player.first_name[0]}${player.last_name[0]}</div>`}
+      <div style="font-size:1.8rem; font-weight:bold;">${player.first_name} ${player.last_name}</div>
+      ${player.nickname ? `<div style="font-size:1rem; color:var(--gold-light); margin-bottom:14px;">"${player.nickname}"</div>` : '<div style="margin-bottom:14px;"></div>'}
+      <div style="width:100%; max-width:500px;">
+        ${shuffled.map(item => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.1); font-size:0.9rem;">
+          <span style="opacity:0.7;">${item.q}</span>
+          <span style="font-weight:bold; max-width:55%; text-align:right;">${item.v}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (slide.type === 'announcements') {
+    const { items } = slide;
+    return `<div style="${base} background:linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);">
+      <div style="font-size:0.9rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:24px;">📢 Announcements</div>
+      <div style="width:100%; max-width:600px;">
+        ${items.map(a => `<div style="background:rgba(255,255,255,0.08); border-left:4px solid var(--gold); border-radius:8px; padding:16px 20px; margin-bottom:12px; font-size:1.05rem; text-align:left;">${a.message}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (slide.type === 'photo') {
+    const { photo, label } = slide;
+    return `<div style="${base} padding:0; background:#000;">
+      <img src="${photo.url}" style="width:100%; height:100%; object-fit:contain;">
+      <div style="position:absolute; bottom:60px; left:0; right:0; text-align:center; background:rgba(0,0,0,0.5); padding:10px 20px;">
+        <div style="font-size:0.75rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:2px;">${label}</div>
+        ${photo.caption ? `<div style="font-size:1rem; color:white; margin-top:4px;">${photo.caption}</div>` : ''}
+      </div>
+    </div>`;
+  }
+  return `<div style="${base}"></div>`;
+}
+
+function subscribeDisplayInterrupts() {
+  db.channel('display-interrupts')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bc_frames' }, async (payload) => {
+      const frame = payload.new;
+      if (frame.id === lastFrameId) return;
+      lastFrameId = frame.id;
+      if (await isScoreBlackout()) return; // suppress during blackout
+      const { data: game } = await db.from('bc_games').select('*').eq('id', frame.game_id).single();
+      if (!game || game.status !== 'live') return;
+      const { data: scorer } = await db.from('bc_players').select('*').eq('id', frame.scorer_id).single();
+      if (!scorer) return;
+      if (frame.points_scored === 2) {
+        queueInterrupt('2pt', scorer, game, frame);
+      }
+      if (frame.is_spock) {
+        queueInterrupt('spock', scorer, game, frame);
+      }
+    })
+    .subscribe();
+}
+
+function queueInterrupt(type, player, game, frame) {
+  displayInterruptQueue.push({ type, player, game, frame });
+  if (!displayInterruptActive) processNextInterrupt();
+}
+
+function processNextInterrupt() {
+  if (!displayInterruptQueue.length) { displayInterruptActive = false; return; }
+  displayInterruptActive = true;
+  const item = displayInterruptQueue.shift();
+  const el = document.getElementById('display-interrupt');
+  const content = document.getElementById('interrupt-content');
+  clearTimeout(displayTimer);
+  clearInterval(displayProgressTimer);
+  const fill = document.getElementById('display-progress-fill');
+  fill.style.transition = 'none';
+  fill.style.width = '0%';
+  if (item.type === '2pt') {
+    content.innerHTML = `
+      <div style="font-size:4rem; margin-bottom:16px;">🎯🎯</div>
+      <div style="font-size:1rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:12px;">2 Point Frame!</div>
+      ${item.player.photo_url ? `<img src="${item.player.photo_url}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;margin-bottom:14px;border:3px solid var(--gold);">` : `<div style="width:120px;height:120px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:bold;margin:0 auto 14px;">${item.player.first_name[0]}${item.player.last_name[0]}</div>`}
+      <div style="font-size:2rem; font-weight:bold; color:white;">${item.player.first_name} ${item.player.last_name}</div>
+      <div style="font-size:1rem; color:var(--gold-light); margin-top:8px;">Court ${item.game.court_number || '?'}</div>`;
+  } else {
+    content.innerHTML = `
+      <div style="font-size:4rem; margin-bottom:16px;">⭐</div>
+      <div style="font-size:1rem; color:var(--gold-light); text-transform:uppercase; letter-spacing:3px; margin-bottom:12px;">SPOCK!</div>
+      ${item.player.photo_url ? `<img src="${item.player.photo_url}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;margin-bottom:14px;border:3px solid var(--gold);">` : `<div style="width:120px;height:120px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:bold;margin:0 auto 14px;">${item.player.first_name[0]}${item.player.last_name[0]}</div>`}
+      <div style="font-size:2rem; font-weight:bold; color:white;">${item.player.first_name} ${item.player.last_name}</div>
+      <div style="font-size:1rem; color:var(--gold-light); margin-top:8px;">Court ${item.game.court_number || '?'}</div>`;
+  }
+  el.style.display = 'flex';
+  setTimeout(() => {
+    el.style.display = 'none';
+    displayInterruptActive = false;
+    if (displayInterruptQueue.length) processNextInterrupt();
+    else showDisplaySlide();
+  }, displayDuration);
+}
+
+function switchPlayer() {
+  if (!confirm('Switch to a different player?')) return;
+  localStorage.removeItem('bocce_player_id');
+  currentPlayer = null;
+  currentGame = null;
+  document.getElementById('nav').style.display = 'none';
+  document.getElementById('ticker-bar').style.display = 'none';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-join').classList.add('active');
+  document.getElementById('join-first').value = '';
+  document.getElementById('join-last').value = '';
+  document.getElementById('join-code').value = '';
+}
+
+
+let tickerMessages = [];
+let tickerIndex = 0;
+
+async function startTicker() {
+  await refreshTickerMessages();
+  setInterval(async () => { await refreshTickerMessages(); }, 30000);
+  setInterval(rotateTicker, 5000);
+}
+
+async function refreshTickerMessages() {
+  const { data } = await db.from('bc_announcements').select('*').order('created_at', { ascending: false }).limit(3);
+  if (data && data.length > 0) tickerMessages = data.map(a => a.message);
+  else tickerMessages = ['Welcome to the Bocce Tournament!'];
+  rotateTicker();
+}
+
+function rotateTicker() {
+  if (!tickerMessages.length) return;
+  const el = document.getElementById('ticker-msg');
+  if (!el) return;
+  el.style.opacity = '0';
+  setTimeout(() => {
+    el.textContent = tickerMessages[tickerIndex % tickerMessages.length];
+    el.style.opacity = '1';
+    tickerIndex++;
+  }, 500);
+}
+
+// ─── AUTO-ANNOUNCEMENTS ───────────────────────────────────
+let lastAnnouncementTime = 0;
+const MIN_ANNOUNCE_GAP = 2 * 60 * 1000; // 2 minutes
+
+async function autoAnnounce(message) {
+  const now = Date.now();
+  if (now - lastAnnouncementTime < MIN_ANNOUNCE_GAP) return;
+  lastAnnouncementTime = now;
+  await db.from('bc_announcements').insert({ message, posted_by: currentPlayer?.id || null });
+  await refreshTickerMessages();
+}
+
+
+// ─── TOURNAMENT PHASES ───────────────────────────────────
+let phaseCountdownInterval = null;
+const PHASES = ['last_game', 'last_scores', 'tournament_over', 'ceremony', 'awards_revealed'];
+
+async function loadDisplayPanel() {
+  const dur = await getConfig('display_duration');
+  if (dur) {
+    displayDuration = parseInt(dur) * 1000;
+    document.getElementById('display-duration').value = parseInt(dur);
+  }
+  await refreshPhaseUI();
+  loadDisplayPhotos();
+}
+
+async function refreshPhaseUI() {
+  const phase = await getConfig('tournament_phase');
+  const p1El = document.getElementById('phase1-panel');
+  const p1Active = document.getElementById('phase1-active');
+  const p2El = document.getElementById('phase2-panel');
+  const p2Active = document.getElementById('phase2-active');
+  const p3El = document.getElementById('phase3-panel');
+  const p3Active = document.getElementById('phase3-active');
+
+  // Reset all
+  [p1El, p2El, p3El].forEach(el => el.style.display = 'block');
+  [p1Active, p2Active, p3Active].forEach(el => el.style.display = 'none');
+
+  if (!phase) return;
+
+  if (phase === 'last_game') {
+    p1El.style.display = 'none';
+    p1Active.style.display = 'block';
+    startPhaseCountdownUI('last_game', 'phase1-countdown-display', '⏳ Last Game Warning');
+  }
+  if (['last_scores', 'tournament_over', 'ceremony', 'awards_revealed'].includes(phase)) {
+    p1El.style.display = 'none';
+    p2El.style.display = 'none';
+    p2Active.style.display = 'block';
+    startPhaseCountdownUI('last_scores', 'phase2-countdown-display', '🚨 Last Score Submission');
+  }
+  if (['tournament_over', 'ceremony', 'awards_revealed'].includes(phase)) {
+    p2El.style.display = 'none';
+    p2Active.style.display = 'none';
+    p3El.style.display = 'none';
+    p3Active.style.display = 'block';
+    await buildAwardsChecklist();
+  }
+  if (['ceremony', 'awards_revealed'].includes(phase)) {
+    document.getElementById('ceremony-countdown-display').style.display = 'block';
+    document.getElementById('ceremony-active-controls').style.display = 'block';
+    startPhaseCountdownUI('ceremony', 'ceremony-countdown-display', '🎉 Awards Ceremony');
+  }
+  if (phase === 'awards_revealed') {
+    document.getElementById('ceremony-active-controls').innerHTML =
+      '<div class="alert alert-success">🏆 Awards are live on display!</div>' +
+      '<button class="btn btn-gray btn-full mt-8" onclick="dismissPhase(\'awards_revealed\')">Reset Tournament</button>';
+  }
+}
+
+async function startLastGame() {
+  const mins = parseInt(document.getElementById('last-game-mins').value);
+  if (!mins || mins < 1) { alert('Enter valid minutes.'); return; }
+  const endsAt = Date.now() + mins * 60000;
+  await db.from('bc_config').upsert({ key: 'tournament_phase', value: 'last_game' });
+  await db.from('bc_config').upsert({ key: 'phase_last_game_ends', value: String(endsAt) });
+  await autoAnnounce(`⏳ Last game warning — ${mins} minutes remaining to start new games!`);
+  refreshPhaseUI();
+}
+
+async function startLastScores() {
+  const mins = parseInt(document.getElementById('last-score-mins').value);
+  if (!mins || mins < 1) { alert('Enter valid minutes.'); return; }
+  const endsAt = Date.now() + mins * 60000;
+  await db.from('bc_config').upsert({ key: 'tournament_phase', value: 'last_scores' });
+  await db.from('bc_config').upsert({ key: 'phase_last_scores_ends', value: String(endsAt) });
+  await autoAnnounce(`🚨 Last score submission — ${mins} minutes to finish all games!`);
+  refreshPhaseUI();
+}
+
+async function startTournamentOver() {
+  if (!confirm('Declare tournament over? Scores and standings will be blacked out on display.')) return;
+  await db.from('bc_config').upsert({ key: 'tournament_phase', value: 'tournament_over' });
+  await autoAnnounce('🏁 Tournament is officially over! Awards ceremony coming soon.');
+  refreshPhaseUI();
+}
+
+async function startCeremony() {
+  const mins = parseInt(document.getElementById('ceremony-mins').value);
+  if (!mins || mins < 1) { alert('Enter valid minutes.'); return; }
+  const endsAt = Date.now() + mins * 60000;
+  await db.from('bc_config').upsert({ key: 'tournament_phase', value: 'ceremony' });
+  await db.from('bc_config').upsert({ key: 'phase_ceremony_ends', value: String(endsAt) });
+  await autoAnnounce(`🎉 Awards Ceremony begins in ${mins} minutes!`);
+  refreshPhaseUI();
+}
+
+async function revealAwards() {
+  await db.from('bc_config').upsert({ key: 'tournament_phase', value: 'awards_revealed' });
+  await autoAnnounce('🏆 Award winners are now being announced!');
+  refreshPhaseUI();
+}
+
+async function dismissPhase(phase) {
+  if (!confirm('Dismiss / reset this phase? The countdown will clear.')) return;
+  if (phase === 'last_game') {
+    await db.from('bc_config').upsert({ key: 'tournament_phase', value: '' });
+    await db.from('bc_config').upsert({ key: 'phase_last_game_ends', value: '' });
+  } else if (phase === 'last_scores') {
+    await db.from('bc_config').upsert({ key: 'tournament_phase', value: 'last_game' });
+    await db.from('bc_config').upsert({ key: 'phase_last_scores_ends', value: '' });
+  } else if (phase === 'ceremony') {
+    await db.from('bc_config').upsert({ key: 'tournament_phase', value: 'tournament_over' });
+    await db.from('bc_config').upsert({ key: 'phase_ceremony_ends', value: '' });
+  } else if (phase === 'awards_revealed') {
+    if (!confirm('This will fully reset the tournament phase. Are you sure?')) return;
+    await db.from('bc_config').upsert({ key: 'tournament_phase', value: '' });
+  }
+  refreshPhaseUI();
+}
+
+function startPhaseCountdownUI(phaseKey, elId, label) {
+  const configKey = phaseKey === 'last_game' ? 'phase_last_game_ends'
+    : phaseKey === 'last_scores' ? 'phase_last_scores_ends'
+    : 'phase_ceremony_ends';
+  const tick = async () => {
+    const raw = await getConfig(configKey);
+    if (!raw) return;
+    const endsAt = parseInt(raw);
+    const remaining = endsAt - Date.now();
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (remaining <= 0) {
+      el.textContent = `${label}: TIME'S UP`;
+      return;
+    }
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    el.textContent = `${label}: ${mins}:${secs.toString().padStart(2, '0')} remaining`;
+  };
+  tick();
+  clearInterval(phaseCountdownInterval);
+  phaseCountdownInterval = setInterval(tick, 1000);
+}
+
+async function buildAwardsChecklist() {
+  const { data: games } = await db.from('bc_games').select('*').eq('status', 'complete');
+  const { data: frames } = await db.from('bc_frames').select('*');
+  const { data: players } = await db.from('bc_players').select('*');
+  if (!players) return;
+  const stats = players.map(p => computePlayerStats(p, games || [], frames || []));
+  stats.sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.ptsPerFrame - a.ptsPerFrame);
+  const qualified = stats.filter(s => s.gamesPlayed >= 3);
+  const dRaw = await getConfig('discretionary_awards');
+  const dAwards = dRaw ? JSON.parse(dRaw) : [];
+
+  const autoAwards = [];
+  if (qualified.length > 0) {
+    const gc = qualified[0];
+    const mostWins = [...qualified].sort((a,b) => b.wins - a.wins)[0];
+    const topRatio = [...qualified].sort((a,b) => b.ptsPerFrame - a.ptsPerFrame)[0];
+    const spockmaster = [...qualified].sort((a,b) => b.spocksPerFrame - a.spocksPerFrame)[0];
+    const formidable = qualified.slice(1,4);
+    autoAwards.push({ name: '🏆 Grand Champion', player: `${gc.player.first_name} ${gc.player.last_name}` });
+    autoAwards.push({ name: '🥇 Most Wins', player: `${mostWins.player.first_name} ${mostWins.player.last_name}` });
+    autoAwards.push({ name: '📈 Top Pts/Frame', player: `${topRatio.player.first_name} ${topRatio.player.last_name}` });
+    autoAwards.push({ name: '⭐ Spockmaster', player: `${spockmaster.player.first_name} ${spockmaster.player.last_name}` });
+    formidable.forEach((f,i) => autoAwards.push({ name: `💪 Formidable Opponent #${i+1}`, player: `${f.player.first_name} ${f.player.last_name}` }));
+  }
+
+  const el = document.getElementById('awards-checklist');
+  const allAwards = [...autoAwards, ...dAwards.map(a => ({ name: `🌟 ${a.award}`, player: a.player_name }))];
+  el.innerHTML = `<div class="card-title" style="margin-bottom:8px;">Awards Checklist</div>` +
+    allAwards.map((a, i) => `
+      <label style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid #eee; cursor:pointer;">
+        <input type="checkbox" id="award-check-${i}" style="width:auto; margin:0;">
+        <span><strong>${a.name}</strong> — ${a.player}</span>
+      </label>`).join('') +
+    `<div class="text-muted mt-8" style="font-size:0.78rem;">Check off each award as you confirm the recipient before the ceremony.</div>`;
+}
+
+async function blockNewGames() {
+  const phase = await getConfig('tournament_phase');
+  return ['last_scores','tournament_over','ceremony','awards_revealed'].includes(phase);
+}
+
+async function isScoreBlackout() {
+  const phase = await getConfig('tournament_phase');
+  return ['last_scores','tournament_over','ceremony','awards_revealed'].includes(phase);
+}
+
+function formatCountdown(endsAt) {
+  const remaining = parseInt(endsAt) - Date.now();
+  if (remaining <= 0) return "TIME'S UP";
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  return `${mins}:${secs.toString().padStart(2,'0')}`;
+}
+
+function showMsg(el, msg, type) {
+  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(() => { el.innerHTML = ''; }, 4000);
+}
+</script>
+</body>
+</html>
